@@ -15,6 +15,7 @@ from kivy.utils import platform
 from kivy.graphics import Color, Line, RoundedRectangle
 
 from common import BgScreen, GameCard, IconButton, ModernButton, MUTED, CYAN
+from database import DatabaseManager
 from tictactoe import TicScreen
 from connect4 import C4Screen
 from chessgame import ChessScreen
@@ -30,7 +31,7 @@ class MenuScreen(BgScreen):
         self.music = music
         root = FloatLayout()
         box = BoxLayout(orientation='vertical', padding=[dp(24), dp(28)], spacing=dp(10))
-        box.add_widget(Label(text='FIVE\nARCADE', font_size=dp(38), bold=True,
+        box.add_widget(Label(text='SIX\nARCADE', font_size=dp(38), bold=True,
                      color=(1, 1, 1, 1), size_hint_y=None, height=dp(82)))
         box.add_widget(Label(text='YOUR NEXT PLAY', font_size=dp(12), bold=True,
                      color=CYAN, size_hint_y=None, height=dp(22)))
@@ -162,8 +163,10 @@ class BackgroundMusic:
             sound.stop()
 
 
-class FiveGamesApp(App):
+class SixGamesApp(App):
     def build(self):
+        self.db = DatabaseManager()
+        self.db.initialize_database()
         self.music = BackgroundMusic()
         sm = ScreenManager(transition=SlideTransition(duration=0.22))
         sm.add_widget(MenuScreen(sm, self.music, name='menu'))
@@ -179,4 +182,4 @@ class FiveGamesApp(App):
 if __name__ == '__main__':
     if platform not in ('android', 'ios'):
         Window.size = (430, 780)
-    FiveGamesApp().run()
+    SixGamesApp().run()

@@ -7,6 +7,7 @@ from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
 from kivy.uix.widget import Widget
 
+from database import DatabaseManager
 from common import BgScreen, DARKBTN, CYAN, MUTED, ORANGE, TopBar, ModernButton, info_popup
 
 
@@ -32,6 +33,7 @@ class MinesweeperScreen(BgScreen):
     def __init__(self, sm, **kwargs):
         super().__init__(bg=(0.035, 0.05, 0.09, 1), **kwargs)
         self.sm = sm
+        self.db = DatabaseManager()
         self.difficulty = 0
         self.rows = 9
         self.mines = 12
@@ -42,6 +44,7 @@ class MinesweeperScreen(BgScreen):
         self.revealed = []
         self.flags = set()
         self.counts = []
+        self.stats = self.db.get_minesweeper_stats()
 
         root = BoxLayout(orientation='vertical', padding=[dp(10), dp(7)], spacing=dp(6))
         root.add_widget(TopBar(sm, 'MINESWEEPER', on_refresh=self.new_game))
@@ -53,9 +56,12 @@ class MinesweeperScreen(BgScreen):
         self.mine_label = Label(text='', color=CYAN, bold=True, font_size=dp(14))
         self.status = Label(text='Buka semua cell yang aman.', color=(0.95, 0.98, 1, 1), bold=True,
                             font_size=dp(13))
+        self.streak_label = Label(text='WIN STREAK: 0\nBEST: 0', color=(1, 1, 1, 1),
+                                   bold=True, font_size=dp(14), size_hint_x=None)
         header.add_widget(self.btn_d)
         header.add_widget(self.mine_label)
         header.add_widget(self.status)
+        header.add_widget(self.streak_label)
         root.add_widget(header)
 
         self.board_grid = GridLayout(cols=self.rows, spacing=dp(2), padding=dp(3),
@@ -74,7 +80,12 @@ class MinesweeperScreen(BgScreen):
         self.add_widget(root)
 
     def on_enter(self):
+        self.stats = self.db.get_minesweeper_stats()
+        self._update_streak_label()
         self.new_game()
+
+    def _update_streak_label(self):
+        self.streak_label.text = f"WIN STREAK: {self.stats.get('current_streak', 0)}\nBEST: {self.stats.get('best_streak', 0)}"
 
     def _settings(self):
         return (9, 12) if self.difficulty == 0 else (12, 28)
@@ -178,9 +189,15 @@ class MinesweeperScreen(BgScreen):
     def _finish(self, won):
         self.finished = True
         if won:
+            self.db.record_minesweeper_win()
+            self.stats = self.db.get_minesweeper_stats()
+            self._update_streak_label()
             self.status.text = 'MENANG! Semua mine berhasil dihindari.'
             info_popup('MENANG!', 'Papan berhasil diselesaikan.', on_ok=self.new_game, btn='Main lagi')
         else:
+            self.db.record_minesweeper_loss()
+            self.stats = self.db.get_minesweeper_stats()
+            self._update_streak_label()
             for row in range(self.rows):
                 for col in range(self.rows):
                     if self.board[row][col]:

@@ -8,6 +8,7 @@ from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
 from kivy.uix.widget import Widget
 
+from database import DatabaseManager
 from common import BgScreen, DARKBTN, ORANGE, TopBar, ModernButton, info_popup, CYAN, MUTED
 
 WORDS = (
@@ -63,11 +64,13 @@ class HangmanScreen(BgScreen):
     def __init__(self, sm, **kwargs):
         super().__init__(bg=(0.07, 0.12, 0.22, 1), **kwargs)
         self.sm = sm
+        self.db = DatabaseManager()
         self.word = ''
         self.guessed = set()
         self.wrong = 0
         self.finished = False
         self.used_words = set()
+        self.stats = self.db.get_hangman_stats()
 
         root = BoxLayout(orientation='vertical', padding=[dp(12), dp(8)], spacing=dp(7))
         root.add_widget(TopBar(sm, 'HANGMAN', on_refresh=self.new_game))
@@ -77,6 +80,10 @@ class HangmanScreen(BgScreen):
         self.hint = Label(text='Tebak kata sebelum enam kesalahan.', color=MUTED,
                           font_size=dp(13), size_hint_y=None, height=dp(24))
         root.add_widget(self.hint)
+        self.streak_label = Label(text='WIN STREAK: 0\nBEST: 0', color=(1, 1, 1, 1),
+                                   bold=True, font_size=dp(14),
+                                   size_hint_y=None, height=dp(42))
+        root.add_widget(self.streak_label)
         self.gallows = Gallows(self)
         root.add_widget(self.gallows)
         self.status = Label(text='Pilih sebuah huruf', color=(1, 0.82, 0.42, 1), bold=True,
@@ -95,7 +102,12 @@ class HangmanScreen(BgScreen):
         self.add_widget(root)
 
     def on_enter(self):
+        self.stats = self.db.get_hangman_stats()
+        self._update_streak_label()
         self.new_game()
+
+    def _update_streak_label(self):
+        self.streak_label.text = f"WIN STREAK: {self.stats.get('current_streak', 0)}\nBEST: {self.stats.get('best_streak', 0)}"
 
     def new_game(self, *args):
         available = [word for word in WORDS if word not in self.used_words]
@@ -146,8 +158,14 @@ class HangmanScreen(BgScreen):
         for key in self.keys.values():
             key.disabled = True
         if won:
+            self.db.record_hangman_win()
+            self.stats = self.db.get_hangman_stats()
+            self._update_streak_label()
             self.status.text = 'Kamu menang!'
             info_popup('MENANG!', f'Kata yang benar: {self.word}', on_ok=self.new_game, btn='Kata baru')
         else:
+            self.db.record_hangman_loss()
+            self.stats = self.db.get_hangman_stats()
+            self._update_streak_label()
             self.status.text = 'Kesempatan habis.'
             info_popup('SELESAI', f'Kata yang benar: {self.word}', on_ok=self.new_game, btn='Coba lagi')
