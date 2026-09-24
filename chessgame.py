@@ -2,6 +2,7 @@ import random
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.uix.button import Button
+from kivy.uix.popup import Popup
 from kivy.uix.widget import Widget
 from kivy.clock import Clock
 from kivy.metrics import dp
@@ -367,24 +368,22 @@ class ChessScreen(BgScreen):
         self.sulit = True
         self.gen = 0
         self.replay_record = None
+        self.player2_mode = None
 
         root = BoxLayout(orientation='vertical', padding=[dp(12), dp(8)], spacing=dp(8))
         root.add_widget(TopBar(sm, 'CATUR', on_refresh=self.reset_game))
 
-        hdr = BoxLayout(size_hint_y=None, height=dp(48), padding=[dp(8), dp(4)], spacing=dp(6))
+        hdr = BoxLayout(size_hint_y=None, height=dp(48), padding=[dp(8), dp(4)], spacing=dp(8))
         self.lbl_k = Label(text='KAMU 16', bold=True, color=CYAN, font_size=dp(16))
-        self.btn_d = ModernButton(text='SULIT', size_hint_x=None, width=dp(84), fill=DARKBTN,
-                      color=(1, 1, 1, 1), bold=True)
-        self.btn_d.bind(on_press=lambda *a: self.toggle())
         self.lbl_v = Label(text='VS', bold=True, color=MUTED)
         self.lbl_b = Label(text='BOT 16', bold=True, color=(1, 0.42, 0.38, 1), font_size=dp(16))
-        for w in (self.lbl_k, self.btn_d, self.lbl_v, self.lbl_b):
+        for w in (self.lbl_k, self.lbl_v, self.lbl_b):
             hdr.add_widget(w)
         root.add_widget(hdr)
 
         self.board = ChessBoard(self)
         root.add_widget(self.board)
-        self.status = Label(text='Giliranmu (putih)', color=MUTED,
+        self.status = Label(text='Pilih mode permainan', color=MUTED,
                     size_hint_y=None, height=dp(34), bold=True)
         root.add_widget(self.status)
         self.replay_btn = ModernButton(text='Ulangi Gerakan', size_hint_y=None, height=dp(46),
@@ -394,7 +393,62 @@ class ChessScreen(BgScreen):
         root.add_widget(self.replay_btn)
         self.add_widget(root)
 
-    def on_enter(self):
+    def on_pre_enter(self):
+        self.reset_session()
+        self._show_mode_prompt()
+
+    def on_leave(self):
+        self.reset_session()
+
+    def reset_session(self):
+        """Clear the active mode and board before the next Chess session."""
+        self.gen += 1
+        self.eng.reset()
+        self.sel = None
+        self.targets = []
+        self.my_turn = True
+        self.over = False
+        self.replay_record = None
+        self.player2_mode = None
+        self.status.text = 'Pilih mode permainan'
+        self.update_labels()
+        self.update_replay_button()
+        self.board._draw()
+
+    def _show_mode_prompt(self):
+        box = BoxLayout(orientation='vertical', padding=dp(18), spacing=dp(10), size_hint=(None, None), size=(dp(260), dp(180)))
+        with box.canvas.before:
+            Color(0.06, 0.09, 0.15, 1)
+            box._bg = RoundedRectangle(pos=box.pos, size=box.size, radius=[dp(16)])
+            Color(0.25, 0.82, 0.9, 0.35)
+            box._border = Line(rounded_rectangle=(box.x, box.y, box.width, box.height, dp(16)), width=dp(1.2))
+        box.bind(pos=lambda *_: self._sync_mode_popup_bg(box), size=lambda *_: self._sync_mode_popup_bg(box))
+        box.add_widget(Label(text='Pilih Player 2', color=(1, 1, 1, 1), bold=True, font_size=dp(18),
+                            size_hint_y=None, height=dp(28)))
+        row = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(10))
+        bot_btn = ModernButton(text='BOT', fill=(0.12, 0.22, 0.35, 1), color=(1, 1, 1, 1), bold=True)
+        bot_btn.bind(on_press=lambda *a: self._set_mode(False, popup))
+        row.add_widget(bot_btn)
+        local_btn = ModernButton(text='PLAYER 2', fill=(0.20, 0.34, 0.42, 1), color=(1, 1, 1, 1), bold=True)
+        local_btn.bind(on_press=lambda *a: self._set_mode(True, popup))
+        row.add_widget(local_btn)
+        box.add_widget(row)
+        popup = Popup(title='CHESS', content=box, size_hint=(None, None), size=(dp(260), dp(180)),
+                      background_color=(0, 0, 0, 0), separator_height=0, title_color=(1, 1, 1, 1),
+                      title_size=dp(16))
+        self._mode_popup = popup
+        popup.open()
+
+    def _sync_mode_popup_bg(self, box):
+        if hasattr(box, '_bg'):
+            box._bg.pos = box.pos
+            box._bg.size = box.size
+        if hasattr(box, '_border'):
+            box._border.rounded_rectangle = (box.x, box.y, box.width, box.height, dp(16))
+
+    def _set_mode(self, is_local, popup):
+        self.player2_mode = is_local
+        popup.dismiss()
         self.new_game()
 
     def new_game(self):
@@ -405,7 +459,7 @@ class ChessScreen(BgScreen):
         self.my_turn = True
         self.over = False
         self.replay_record = None
-        self.status.text = 'Giliranmu (putih)'
+        self.status.text = 'Giliranmu (putih)' if not self.player2_mode else 'Giliran putih'
         self.update_labels()
         self.update_replay_button()
         self.board._draw()
@@ -414,16 +468,11 @@ class ChessScreen(BgScreen):
         """Reset the board and invalidate any bot move already scheduled."""
         self.new_game()
 
-    def toggle(self):
-        self.sulit = not self.sulit
-        self.btn_d.text = 'SULIT' if self.sulit else 'SEDANG'
-        self.new_game()
-
     def update_labels(self):
         w = sum(1 for row in self.eng.b for p in row if p and p.isupper())
         b_ = sum(1 for row in self.eng.b for p in row if p and not p.isupper())
         self.lbl_k.text = f'KAMU {w}'
-        self.lbl_b.text = f'BOT {b_}'
+        self.lbl_b.text = f'BOT {b_}' if not self.player2_mode else f'P2 {b_}'
 
     def tap(self, r, c):
         if self.over or not self.my_turn:
@@ -432,6 +481,17 @@ class ChessScreen(BgScreen):
             self.do_move((self.sel[0], self.sel[1], r, c))
             return
         p = self.eng.b[r][c]
+        turn = self.eng.turn
+        if self.player2_mode:
+            if p and ((turn == 'w' and p.isupper()) or (turn == 'b' and p.islower())):
+                self.sel = (r, c)
+                self.targets = [m for m in self.eng.legal(turn) if (m[0], m[1]) == (r, c)]
+                self.board._draw()
+            else:
+                self.sel = None
+                self.targets = []
+                self.board._draw()
+            return
         if p and p.isupper():
             self.sel = (r, c)
             self.targets = [m for m in self.eng.legal('w') if (m[0], m[1]) == (r, c)]
@@ -443,15 +503,16 @@ class ChessScreen(BgScreen):
 
     def do_move(self, m):
         before = self._snapshot()
+        turn = self.eng.turn
         self.eng.make(m)
         self.eng.last = m
-        self.replay_record = (before, self._snapshot(), m, 'w')
+        self.replay_record = (before, self._snapshot(), m, turn)
         self.sel = None
         self.targets = []
         self.update_labels()
         self.update_replay_button()
         self.board._draw()
-        self.after_move('w')
+        self.after_move(turn)
 
     def _snapshot(self):
         return ([row[:] for row in self.eng.b], self.eng.turn,
@@ -472,24 +533,33 @@ class ChessScreen(BgScreen):
 
     def replay_move(self):
         record = self.replay_record
-        if self.over or record is None or not self._same_state(self._snapshot(), record[1]):
+        if self.over or record is None:
             self.update_replay_button()
             return
-        before, _, move, moved = record
-        if move not in self.eng.legal(self.eng.turn):
-            self.replay_record = None
+        before, after, move, moved = record
+        cur = self._snapshot()
+        if self._same_state(cur, after):
+            self._restore(before)
+            self.sel = None
+            self.targets = []
+            self.update_labels()
+            self.board._draw()
+            self.status.text = 'Gerakan terakhir dibatalkan'
+            self.replay_record = (before, after, move, moved)
             self.update_replay_button()
             return
-        self.gen += 1
-        self._restore(before)
-        self.eng.make(move)
-        self.eng.last = move
-        self.sel = None
-        self.targets = []
-        self.update_labels()
+        if self._same_state(cur, before):
+            self.eng.make(move)
+            self.eng.last = move
+            self.sel = None
+            self.targets = []
+            self.update_labels()
+            self.board._draw()
+            self.status.text = 'Gerakan terakhir diputar ulang'
+            self.replay_record = (before, after, move, moved)
+            self.update_replay_button()
+            return
         self.update_replay_button()
-        self.board._draw()
-        self.after_move(moved)
 
     def after_move(self, moved):
         eng = self.eng
@@ -508,6 +578,11 @@ class ChessScreen(BgScreen):
                 info_popup('REMIS', 'Remis (stalemate) — tidak ada langkah sah.',
                            on_ok=self.new_game, btn='Main lagi')
             return
+        if self.player2_mode:
+            self.my_turn = True
+            side = 'Putih' if eng.turn == 'w' else 'Hitam'
+            self.status.text = ('SKAK! ' if chk else '') + f'Giliran {side}'
+            return
         if moved == 'w':
             self.my_turn = False
             self.status.text = ('SKAK! ' if chk else '') + 'Bot berpikir...'
@@ -517,19 +592,13 @@ class ChessScreen(BgScreen):
             self.status.text = ('SKAK! ' if chk else '') + 'Giliranmu'
 
     def bot_move(self, g):
-        if self.over or g != self.gen:
+        if self.over or g != self.gen or self.player2_mode:
             return
         eng = self.eng
         moves = eng.legal('b')
         if not moves:
             return
-        if self.sulit:
-            _, m = eng.search(3, -1e9, 1e9, 'b')   # kedalaman 3
-        else:
-            if random.random() < 0.35:
-                m = random.choice(moves)
-            else:
-                _, m = eng.search(1, -1e9, 1e9, 'b')
+        _, m = eng.search(3, -1e9, 1e9, 'b')
         if m is None:
             m = random.choice(moves)
         before = self._snapshot()

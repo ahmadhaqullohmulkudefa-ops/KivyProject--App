@@ -4,7 +4,7 @@ from datetime import datetime
 
 
 class DatabaseManager:
-    """DatabaseManager for the SixGames SQLite database."""
+    """DatabaseManager for the SQLite game database."""
 
     def __init__(self, db_path=None):
         if db_path is None:

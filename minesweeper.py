@@ -34,9 +34,8 @@ class MinesweeperScreen(BgScreen):
         super().__init__(bg=(0.035, 0.05, 0.09, 1), **kwargs)
         self.sm = sm
         self.db = DatabaseManager()
-        self.difficulty = 0
         self.rows = 9
-        self.mines = 12
+        self.mines = 10
         self.flag_mode = False
         self.finished = False
         self.cells = []
@@ -46,29 +45,28 @@ class MinesweeperScreen(BgScreen):
         self.counts = []
         self.stats = self.db.get_minesweeper_stats()
 
-        root = BoxLayout(orientation='vertical', padding=[dp(10), dp(7)], spacing=dp(6))
+        root = BoxLayout(orientation='vertical', padding=[dp(10), dp(8)], spacing=dp(8))
         root.add_widget(TopBar(sm, 'MINESWEEPER', on_refresh=self.new_game))
 
-        header = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(6))
-        self.btn_d = ModernButton(text='SEDANG', fill=DARKBTN, color=(1, 1, 1, 1),
-                                  bold=True, size_hint_x=None, width=dp(92))
-        self.btn_d.bind(on_press=lambda *_: self.toggle_difficulty())
-        self.mine_label = Label(text='', color=CYAN, bold=True, font_size=dp(14))
-        self.status = Label(text='Buka semua cell yang aman.', color=(0.95, 0.98, 1, 1), bold=True,
-                            font_size=dp(13))
+        info = BoxLayout(size_hint_y=None, height=dp(36), spacing=dp(8))
+        self.mine_label = Label(text='MINE: 10', color=CYAN, bold=True, font_size=dp(13))
+        self.flag_label = Label(text='FLAG: 0', color=(1, 1, 1, 1), bold=True, font_size=dp(13))
         self.streak_label = Label(text='WIN STREAK: 0\nBEST: 0', color=(1, 1, 1, 1),
-                                   bold=True, font_size=dp(14), size_hint_x=None)
-        header.add_widget(self.btn_d)
-        header.add_widget(self.mine_label)
-        header.add_widget(self.status)
-        header.add_widget(self.streak_label)
-        root.add_widget(header)
+                                 bold=True, font_size=dp(12), size_hint_x=None)
+        info.add_widget(self.mine_label)
+        info.add_widget(self.flag_label)
+        info.add_widget(self.streak_label)
+        root.add_widget(info)
+
+        self.status = Label(text='Buka semua cell yang aman', color=(0.95, 0.98, 1, 1), bold=True,
+                            font_size=dp(12), size_hint_y=None, height=dp(24))
+        root.add_widget(self.status)
 
         self.board_grid = GridLayout(cols=self.rows, spacing=dp(2), padding=dp(3),
-                                     size_hint=(1, 1))
+                                     size_hint=(1, 1), minimum_size=(dp(250), dp(250)))
         root.add_widget(self.board_grid)
 
-        controls = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(6))
+        controls = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
         self.flag_button = ModernButton(text='TANDAI FLAG', fill=(0.1, 0.3, 0.42, 1),
                                         color=(1, 1, 1, 1), bold=True)
         self.flag_button.bind(on_press=lambda *_: self.toggle_flag_mode())
@@ -79,6 +77,10 @@ class MinesweeperScreen(BgScreen):
         root.add_widget(controls)
         self.add_widget(root)
 
+    def _go_menu(self):
+        self.sm.transition.direction = 'right'
+        self.sm.current = 'menu'
+
     def on_enter(self):
         self.stats = self.db.get_minesweeper_stats()
         self._update_streak_label()
@@ -87,16 +89,7 @@ class MinesweeperScreen(BgScreen):
     def _update_streak_label(self):
         self.streak_label.text = f"WIN STREAK: {self.stats.get('current_streak', 0)}\nBEST: {self.stats.get('best_streak', 0)}"
 
-    def _settings(self):
-        return (9, 12) if self.difficulty == 0 else (12, 28)
-
-    def toggle_difficulty(self):
-        self.difficulty = 1 - self.difficulty
-        self.new_game()
-
     def new_game(self, *_):
-        self.rows, self.mines = self._settings()
-        self.btn_d.text = 'SEDANG' if self.difficulty == 0 else 'SULIT'
         self.flag_mode = False
         self.flag_button.text = 'TANDAI FLAG'
         self.finished = False
@@ -129,7 +122,8 @@ class MinesweeperScreen(BgScreen):
         return self.cells[row * self.rows + col]
 
     def _refresh(self):
-        self.mine_label.text = f'MINE {self.mines - len(self.flags)} | FLAG {len(self.flags)}'
+        self.mine_label.text = f'MINE: {self.mines - len(self.flags)}'
+        self.flag_label.text = f'FLAG: {len(self.flags)}'
         for row in range(self.rows):
             for col in range(self.rows):
                 cell = self._cell(row, col)

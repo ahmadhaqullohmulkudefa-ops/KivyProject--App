@@ -12,12 +12,11 @@ from kivy.uix.label import Label
 from kivy.uix.popup import Popup
 from kivy.metrics import dp
 from kivy.utils import platform
-from kivy.graphics import Color, Line, RoundedRectangle
+from kivy.graphics import Color, Ellipse, Line, RoundedRectangle
 
 from common import BgScreen, GameCard, IconButton, ModernButton, MUTED, CYAN
 from database import DatabaseManager
 from tictactoe import TicScreen
-from connect4 import C4Screen
 from chessgame import ChessScreen
 from hangman import HangmanScreen
 from mazegame import MazeScreen
@@ -29,34 +28,63 @@ class MenuScreen(BgScreen):
         super().__init__(bg=(0.035, 0.05, 0.09, 1), **kw)
         self.sm = sm
         self.music = music
+
         root = FloatLayout()
-        box = BoxLayout(orientation='vertical', padding=[dp(24), dp(28)], spacing=dp(10))
-        box.add_widget(Label(text='SIX\nARCADE', font_size=dp(38), bold=True,
-                     color=(1, 1, 1, 1), size_hint_y=None, height=dp(82)))
-        box.add_widget(Label(text='YOUR NEXT PLAY', font_size=dp(12), bold=True,
-                     color=CYAN, size_hint_y=None, height=dp(22)))
-        box.add_widget(Label(text='Enam tantangan singkat untuk dimainkan kapan saja', font_size=dp(13),
-                             color=MUTED, size_hint_y=None, height=dp(28)))
-        games = (('TIC TAC TOE', 'Strategi cepat melawan bot', 'ttt', (0.12, 0.3, 0.58, 1), 'X'),
-                 ('CONNECT 4', 'Susun empat keping lebih dulu', 'c4', (0.58, 0.16, 0.18, 1), '4'),
-                 ('CATUR', 'Pertarungan klasik di papan 8x8', 'chess', (0.24, 0.27, 0.34, 1), 'K'),
-                 ('HANGMAN', 'Temukan kata rahasia', 'hangman', (0.1, 0.42, 0.34, 1), '?'),
-                 ('LABIRIN', 'Temukan jalan keluar', 'maze', (0.5, 0.3, 0.15, 1), '+'),
-                 ('MINESWEEPER', 'Classic Mine Puzzle', 'minesweeper', (0.08, 0.42, 0.42, 1), '*'))
-        for t, desc, n, color, icon in games:
-            b = GameCard(t, desc, accent=color, symbol=icon, size_hint_y=None, height=dp(64))
-            b.bind(on_press=lambda inst, nm=n: self.go(nm))
-            box.add_widget(b)
-        box.add_widget(Label(text='MAIN • MENANG • ULANGI', font_size=dp(11),
-                             color=MUTED, size_hint_y=None, height=dp(24)))
-        root.add_widget(box)
+
+        with root.canvas.before:
+            Color(0.12, 0.18, 0.30, 0.22)
+            root._bg_orb_a = Ellipse(pos=(dp(-18), root.height - dp(150)), size=(dp(220), dp(220)))
+            Color(0.15, 0.27, 0.40, 0.12)
+            root._bg_orb_b = Ellipse(pos=(root.width - dp(160), root.height - dp(110)), size=(dp(200), dp(200)))
+            Color(0.18, 0.82, 0.88, 0.08)
+            root._line = Line(points=[root.center_x - dp(90), root.height - dp(112), root.center_x + dp(90), root.height - dp(112)], width=dp(1.1))
+
+        def _update_background(*_):
+            root._bg_orb_a.pos = (dp(-18), root.height - dp(150))
+            root._bg_orb_a.size = (dp(220), dp(220))
+            root._bg_orb_b.pos = (root.width - dp(160), root.height - dp(110))
+            root._bg_orb_b.size = (dp(200), dp(200))
+            root._line.points = [root.center_x - dp(90), root.height - dp(112), root.center_x + dp(90), root.height - dp(112)]
+
+        root.bind(size=_update_background, pos=_update_background)
+
         self.music_button = IconButton(
             sym='music_on' if music.enabled else 'music_off',
-            bg=(0.12, 0.18, 0.28, 1), fg=(0.75, 0.9, 0.95, 1),
+            bg=(0.10, 0.16, 0.28, 1), fg=(0.78, 0.92, 0.98, 1),
             size_hint=(None, None), size=(dp(42), dp(42)),
-            pos_hint={'right': 0.96, 'top': 0.96})
+            pos_hint={'right': 0.98, 'top': 0.96})
         self.music_button.bind(on_press=self.open_music_menu)
         root.add_widget(self.music_button)
+
+        header = BoxLayout(orientation='vertical', size_hint=(None, None),
+                           size=(dp(260), dp(88)), pos_hint={'center_x': 0.5, 'top': 0.91})
+        header.add_widget(Label(text='FiveGames', font_size=dp(34), bold=True,
+                                color=(1, 1, 1, 1), halign='center', valign='middle',
+                                size_hint=(1, None), height=dp(42)))
+        header.add_widget(Label(text='5 GAMES', font_size=dp(11), bold=True,
+                                color=(0.67, 0.8, 0.92, 1), halign='center', valign='middle',
+                                size_hint=(1, None), height=dp(16)))
+        root.add_widget(header)
+
+        games = (
+            ('TIC TAC TOE', 'ttt', (0.10, 0.32, 0.68, 1), 'X'),
+            ('CHESS', 'chess', (0.28, 0.34, 0.46, 1), '♟'),
+            ('HANGMAN', 'hangman', (0.08, 0.48, 0.38, 1), '?'),
+            ('LABIRIN', 'maze', (0.58, 0.30, 0.12, 1), '+'),
+            ('MINESWEEPER', 'minesweeper', (0.05, 0.48, 0.50, 1), '*'))
+        game_box = BoxLayout(orientation='vertical', spacing=dp(10), size_hint=(0.85, None),
+                             height=dp(5 * 70 + 4 * 10), pos_hint={'center_x': 0.5, 'top': 0.67})
+        for title, name, color, icon in games:
+            button = GameCard(title, accent=color, symbol=icon, size_hint=(1, None), height=dp(70))
+            button.bind(on_press=lambda inst, nm=name: self.go(nm))
+            game_box.add_widget(button)
+        root.add_widget(game_box)
+
+        footer = Label(text='SELECT A GAME TO START', font_size=dp(10), bold=True,
+                       color=(0.58, 0.72, 0.88, 1), halign='center', valign='middle',
+                       size_hint=(None, None), size=(dp(220), dp(18)), pos_hint={'center_x': 0.5, 'y': 0.055})
+        root.add_widget(footer)
+
         self.add_widget(root)
 
     def go(self, nm):
@@ -64,33 +92,36 @@ class MenuScreen(BgScreen):
         self.sm.current = nm
 
     def open_music_menu(self, *args):
-        box = BoxLayout(orientation='vertical', padding=dp(12), spacing=dp(7))
-        with box.canvas.before:
-            Color(0.075, 0.10, 0.16, 1)
-            box._music_bg = RoundedRectangle(pos=box.pos, size=box.size, radius=[dp(14)])
+        content = BoxLayout(orientation='vertical', padding=[dp(12), dp(16)], spacing=dp(6), size_hint=(None, None),
+                    size=(dp(220), dp(500)))
+        with content.canvas.before:
+            Color(0.06, 0.10, 0.17, 1)
+            content._music_bg = RoundedRectangle(pos=content.pos, size=content.size, radius=[dp(14)])
             Color(0.25, 0.82, 0.9, 0.35)
-            box._music_border = Line(rounded_rectangle=(box.x, box.y, box.width, box.height, dp(14)), width=dp(1))
-        box.bind(pos=self._update_music_popup_bg, size=self._update_music_popup_bg)
-        box.add_widget(Label(text='BACKGROUND MUSIC', color=(1, 1, 1, 1), bold=True,
-                             font_size=dp(15), size_hint_y=None, height=dp(30)))
-        for index, _ in enumerate(self.music.paths, start=1):
-            active = self.music.enabled and self.music.current_index == index - 1
-            label = f'✓  Opsi {index}' if active else f'♪  Opsi {index}'
-            button = ModernButton(text=label, fill=(0.1, 0.3, 0.42, 1) if active else (0.12, 0.18, 0.28, 1),
-                                  color=(0.95, 0.98, 1, 1), bold=True, size_hint_y=None, height=dp(38))
-            button.bind(on_press=lambda instance, choice=index - 1: self.select_music(choice, popup))
-            box.add_widget(button)
+            content._music_border = Line(rounded_rectangle=(content.x, content.y, content.width, content.height, dp(14)), width=dp(1.2))
+        content.bind(pos=self._update_music_popup_bg, size=self._update_music_popup_bg)
+        content.add_widget(Label(text='FiveGames', color=(0.96, 0.98, 1, 1), bold=True,
+                                 font_size=dp(30), halign='center', valign='middle',
+                                 text_size=(dp(196), None), size_hint_y=1))
+        content.add_widget(Label(text='BACKGROUND MUSIC', color=(1, 1, 1, 1), bold=True,
+                                 font_size=dp(13), size_hint_y=None, height=dp(24)))
+        for index, _ in enumerate(self.music.paths):
+            active = self.music.enabled and self.music.current_index == index
+            label = f'{"✓ " if active else ""}Ops  {index + 1}' if active else f'Ops  {index + 1}'
+            button = ModernButton(text=label, fill=(0.10, 0.30, 0.42, 1) if active else (0.12, 0.18, 0.28, 1),
+                                 color=(0.95, 0.98, 1, 1), bold=True, size_hint_y=None, height=dp(32))
+            button.bind(on_press=lambda instance, choice=index: self.select_music(choice, popup))
+            content.add_widget(button)
         off = ModernButton(text='Matikan Musik', fill=(0.38, 0.16, 0.2, 1),
-                           color=(1, 0.95, 0.95, 1), bold=True, size_hint_y=None, height=dp(38))
+                           color=(1, 0.95, 0.95, 1), bold=True, size_hint_y=None, height=dp(32))
         off.bind(on_press=lambda *button: self.mute_music(popup))
-        box.add_widget(off)
+        content.add_widget(off)
         close = ModernButton(text='Tutup', fill=(0.12, 0.18, 0.28, 1),
-                             color=(0.85, 0.92, 1, 1), bold=True, size_hint_y=None, height=dp(38))
+                             color=(0.85, 0.92, 1, 1), bold=True, size_hint_y=None, height=dp(32))
         close.bind(on_press=lambda *button: popup.dismiss())
-        box.add_widget(close)
-        popup = Popup(content=box, size_hint=(None, None), size=(dp(270), dp(410)),
+        popup = Popup(title='MUSIC', content=content, size_hint=(None, None), size=(dp(220), dp(500)),
                       pos_hint={'right': 0.98, 'top': 0.91}, background_color=(0, 0, 0, 0),
-                      separator_height=0)
+                      separator_height=0, title_color=(1, 1, 1, 1), title_size=dp(14))
         popup.open()
 
     def _update_music_popup_bg(self, box, *args):
@@ -116,8 +147,12 @@ class MenuScreen(BgScreen):
 class BackgroundMusic:
     def __init__(self):
         music_dir = os.path.join(os.path.dirname(__file__), 'assets', 'music')
-        self.paths = [os.path.join(music_dir, f'opsi{index}.mp3')
-                  for index in range(1, 7) if os.path.isfile(os.path.join(music_dir, f'opsi{index}.mp3'))]
+        self.paths = []
+        if os.path.isdir(music_dir):
+            for index in range(1, 9):
+                path = os.path.join(music_dir, f'opsi{index}.mp3')
+                if os.path.isfile(path):
+                    self.paths.append(path)
         self.sounds = {}
         self.current_sound = None
         self.current_index = None
@@ -163,7 +198,9 @@ class BackgroundMusic:
             sound.stop()
 
 
-class SixGamesApp(App):
+class FiveGamesApp(App):
+    title = 'FiveGames'
+
     def build(self):
         self.db = DatabaseManager()
         self.db.initialize_database()
@@ -171,7 +208,6 @@ class SixGamesApp(App):
         sm = ScreenManager(transition=SlideTransition(duration=0.22))
         sm.add_widget(MenuScreen(sm, self.music, name='menu'))
         sm.add_widget(TicScreen(sm, name='ttt'))
-        sm.add_widget(C4Screen(sm, name='c4'))
         sm.add_widget(ChessScreen(sm, name='chess'))
         sm.add_widget(HangmanScreen(sm, name='hangman'))
         sm.add_widget(MazeScreen(sm, name='maze'))
@@ -182,4 +218,4 @@ class SixGamesApp(App):
 if __name__ == '__main__':
     if platform not in ('android', 'ios'):
         Window.size = (430, 780)
-    SixGamesApp().run()
+    FiveGamesApp().run()

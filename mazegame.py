@@ -3,7 +3,6 @@ from collections import deque
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
-from kivy.uix.button import Button
 from kivy.uix.widget import Widget
 from kivy.clock import Clock
 from kivy.core.window import Window
@@ -11,11 +10,11 @@ from kivy.metrics import dp
 from kivy.graphics import Color, Line, Ellipse, Rectangle, InstructionGroup
 
 from database import DatabaseManager
-from common import BgScreen, TopBar, IconButton, ModernButton, info_popup, Hearts, DARKBTN, CYAN, MUTED
+from common import BgScreen, TopBar, IconButton, ModernButton, info_popup, Hearts, CYAN, MUTED
 
 # arah: 0=atas 1=kanan 2=bawah 3=kiri
 DIRS = [(-1, 0), (0, 1), (1, 0), (0, -1)]
-DIFFS = [('SEDANG', 11, 14), ('SULIT', 15, 18)]
+DIFFS = [('SULIT', 15, 18)]
 
 
 def gen_maze(rows, cols):
@@ -136,7 +135,7 @@ class MazeScreen(BgScreen):
         super().__init__(bg=(0.13, 0.12, 0.16, 1), **kw)
         self.sm = sm
         self.db = DatabaseManager()
-        self.di = 1          # default: SULIT
+        self.di = 0
         self.level = 1
         self.highest_level = 1
         self.walls = None
@@ -146,16 +145,9 @@ class MazeScreen(BgScreen):
         root.add_widget(TopBar(sm, 'LABIRIN'))
 
         hdr = BoxLayout(size_hint_y=None, height=dp(48), padding=[dp(8), dp(4)], spacing=dp(8))
-        self.btn_d = ModernButton(text='SULIT', size_hint_x=None, width=dp(90), fill=DARKBTN,
-                      color=(1, 1, 1, 1), bold=True)
-        self.btn_d.bind(on_press=lambda *a: self.cycle_diff())
         self.lbl_l = Label(text='Level 1', color=CYAN, bold=True, font_size=dp(18))
         self.hearts = Hearts(size_hint_x=None, width=dp(110))
-        self.resume_btn = ModernButton(text='MULAI', size_hint_x=None, width=dp(84),
-                                       fill=(0.12, 0.30, 0.42, 1), color=(1, 1, 1, 1),
-                                       bold=True)
-        self.resume_btn.bind(on_press=lambda *a: self.resume_or_start())
-        hdr.add_widget(self.btn_d); hdr.add_widget(self.lbl_l); hdr.add_widget(self.hearts); hdr.add_widget(self.resume_btn)
+        hdr.add_widget(self.lbl_l); hdr.add_widget(self.hearts)
         root.add_widget(hdr)
 
         self.board = MazeBoard(self)
@@ -164,14 +156,14 @@ class MazeScreen(BgScreen):
         hint_row = BoxLayout(size_hint_y=None, height=dp(54), padding=[dp(8), dp(3)])
         self.hint_btn = IconButton(sym='bulb', bg=(1, 0.85, 0.25, 1), fg=(0.35, 0.25, 0.05, 1),
                                    size_hint=(None, None), size=(dp(52), dp(52)),
-                       pos_hint={'right': 1})
+                                   pos_hint={'right': 1})
         self.hint_btn.bind(on_press=lambda *a: self.hint())
         hint_row.add_widget(Widget())
         hint_row.add_widget(self.hint_btn)
         root.add_widget(hint_row)
 
         ctr = GridLayout(cols=3, size_hint_y=None, height=dp(82),
-             spacing=dp(3), padding=[dp(84), dp(2)])
+                        spacing=dp(3), padding=[dp(84), dp(2)])
         up = IconButton(sym='up', size_hint=(1, None), height=dp(34))
         up.bind(on_press=lambda *a: self.move(0))
         ctr.add_widget(Widget()); ctr.add_widget(up); ctr.add_widget(Widget())
@@ -182,7 +174,7 @@ class MazeScreen(BgScreen):
         root.add_widget(ctr)
 
         self.status = Label(text='Capai lingkaran hijau!', color=MUTED,
-                    size_hint_y=None, height=dp(30), bold=True)
+                           size_hint_y=None, height=dp(30), bold=True)
         root.add_widget(self.status)
         self.add_widget(root)
 
@@ -191,7 +183,6 @@ class MazeScreen(BgScreen):
         self.progress = self.db.get_maze_progress()
         self.level = int(self.progress.get('current_level') or 1)
         self.highest_level = int(self.progress.get('highest_level') or self.level)
-        self.resume_btn.text = 'LANJUTKAN' if self.highest_level > 1 else 'MULAI'
         self.start()
 
     def on_leave(self):
@@ -199,33 +190,20 @@ class MazeScreen(BgScreen):
         Window.unbind(on_key_down=self._key)
 
     def _key(self, win, key, *a):
-        m = {273: 0, 275: 1, 274: 2, 276: 3}   # panah keyboard (desktop)
+        m = {273: 0, 275: 1, 274: 2, 276: 3}
         if key in m:
             self.move(m[key])
             return True
         return False
 
-    def resume_or_start(self):
-        self.progress = self.db.get_maze_progress()
-        self.level = int(self.progress.get('current_level') or 1)
-        self.highest_level = int(self.progress.get('highest_level') or self.level)
-        self.resume_btn.text = 'LANJUTKAN' if self.highest_level > 1 else 'MULAI'
-        self.start()
-
     def start(self):
-        name, cols, rows = DIFFS[self.di]
+        _, cols, rows = DIFFS[self.di]
         self.cols, self.rows = cols, rows
         self.walls = gen_maze(rows, cols)
-        self.pos_ = (rows - 1, 0)              # kiri bawah
+        self.pos_ = (rows - 1, 0)
         self.hearts.n = 3
         self.lbl_l.text = f'Level {self.level}'
-        self.btn_d.text = name
         self.board._draw()
-
-    def cycle_diff(self):
-        self.di = (self.di + 1) % 2
-        self.level = 1
-        self.start()
 
     def move(self, di):
         if self.walls is None:
@@ -238,11 +216,10 @@ class MazeScreen(BgScreen):
             self.pos_ = (rr, cc)
             self.board.hide_hint()
             self.board._draw()
-            if self.pos_ == (0, self.cols - 1):     # pojok kanan atas = exit
+            if self.pos_ == (0, self.cols - 1):
                 self.highest_level = max(self.highest_level, self.level + 1)
                 self.db.save_maze_progress(self.level + 1, self.highest_level)
                 self.level += 1
-                self.resume_btn.text = 'LANJUTKAN'
                 self.lbl_l.text = f'Level {self.level}'
                 info_popup('SELESAI!', f'Level selesai! Lanjut ke level {self.level}.',
                            on_ok=self.start, btn='Lanjut')

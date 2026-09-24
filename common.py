@@ -1,5 +1,6 @@
 from kivy.uix.screenmanager import Screen
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.anchorlayout import AnchorLayout
 from kivy.uix.label import Label
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.widget import Widget
@@ -54,16 +55,133 @@ class ModernButton(Button):
             Line(rounded_rectangle=(self.x, self.y, self.width, self.height, dp(12)), width=dp(1))
 
 
-class GameCard(ModernButton):
-    def __init__(self, title, subtitle, accent=(0.12, 0.3, 0.58, 1), symbol='>', **kw):
-        super().__init__(fill=accent, **kw)
-        self.text = f'{symbol}   {title}\n       {subtitle}'
-        self.halign = 'left'
-        self.valign = 'middle'
-        self.font_size = dp(15)
-        self.bold = True
-        self.color = (1, 1, 1, 1)
-        self.padding = [dp(18), 0]
+class GameIcon(Widget):
+    """Ikon mini game yang digambar dengan Canvas agar tidak tergantung Unicode."""
+    def __init__(self, kind='ttt', accent=(0.25, 0.82, 0.9, 1), **kw):
+        super().__init__(**kw)
+        self.kind = kind
+        self.accent = accent
+        self.bind(pos=self._redraw, size=self._redraw)
+        self._redraw()
+
+    def _redraw(self, *args):
+        self.canvas.clear()
+        if self.width <= 0 or self.height <= 0:
+            return
+        x, y, w, h = self.pos[0], self.pos[1], self.size[0], self.size[1]
+        cx, cy = x + w / 2, y + h / 2
+        pad = min(w, h) * 0.18
+        base = self.accent[:3]
+
+        with self.canvas:
+            Color(*base, 0.18)
+            RoundedRectangle(pos=(x + pad * 0.35, y + pad * 0.35), size=(w - pad * 0.7, h - pad * 0.7), radius=[min(w, h) * 0.24])
+
+            if self.kind == 'ttt':
+                Color(0.92, 0.96, 1, 0.95)
+                Line(points=[x + w * 0.33, y + h * 0.26, x + w * 0.33, y + h * 0.74], width=dp(1.6))
+                Line(points=[x + w * 0.67, y + h * 0.26, x + w * 0.67, y + h * 0.74], width=dp(1.6))
+                Line(points=[x + w * 0.25, y + h * 0.33, x + w * 0.75, y + h * 0.33], width=dp(1.6))
+                Line(points=[x + w * 0.25, y + h * 0.67, x + w * 0.75, y + h * 0.67], width=dp(1.6))
+                Color(0.96, 0.99, 1, 0.9)
+                Line(points=[x + w * 0.22, y + h * 0.72, x + w * 0.44, y + h * 0.5], width=dp(1.8))
+                Line(points=[x + w * 0.22, y + h * 0.5, x + w * 0.44, y + h * 0.72], width=dp(1.8))
+                Ellipse(pos=(x + w * 0.55, y + h * 0.42), size=(w * 0.2, h * 0.2))
+                Line(circle=(x + w * 0.65, y + h * 0.52, min(w, h) * 0.12), width=dp(1.8))
+            elif self.kind == 'chess':
+                Color(0.96, 0.98, 1, 0.9)
+                Ellipse(pos=(cx - w * 0.16, cy - h * 0.08), size=(w * 0.32, h * 0.28))
+                Line(points=[cx, cy - h * 0.24, cx, cy + h * 0.22], width=dp(2.2))
+                Line(points=[cx - w * 0.12, cy + h * 0.05, cx + w * 0.12, cy + h * 0.05], width=dp(2.2))
+                Line(points=[cx - w * 0.08, cy - h * 0.06, cx + w * 0.08, cy - h * 0.06], width=dp(2.1))
+                Line(points=[cx - w * 0.18, cy - h * 0.22, cx + w * 0.18, cy - h * 0.22], width=dp(2.1))
+            elif self.kind == 'hangman':
+                Color(0.94, 0.97, 1, 0.9)
+                Line(points=[x + w * 0.32, y + h * 0.24, x + w * 0.32, y + h * 0.76], width=dp(1.8))
+                Line(points=[x + w * 0.32, y + h * 0.76, x + w * 0.67, y + h * 0.76], width=dp(1.8))
+                Line(points=[x + w * 0.51, y + h * 0.28, x + w * 0.51, y + h * 0.62], width=dp(1.8))
+                Ellipse(pos=(x + w * 0.42, y + h * 0.62), size=(w * 0.16, h * 0.16))
+                Line(points=[x + w * 0.51, y + h * 0.46, x + w * 0.61, y + h * 0.32], width=dp(1.8))
+                Line(points=[x + w * 0.51, y + h * 0.46, x + w * 0.41, y + h * 0.32], width=dp(1.8))
+                Line(points=[x + w * 0.51, y + h * 0.46, x + w * 0.58, y + h * 0.22], width=dp(1.8))
+                Line(points=[x + w * 0.51, y + h * 0.46, x + w * 0.41, y + h * 0.22], width=dp(1.8))
+            elif self.kind == 'maze':
+                Color(0.94, 0.98, 1, 0.9)
+                Rectangle(pos=(x + w * 0.22, y + h * 0.18), size=(w * 0.56, h * 0.56))
+                Color(*base, 0.3)
+                Rectangle(pos=(x + w * 0.34, y + h * 0.3), size=(w * 0.1, h * 0.34))
+                Rectangle(pos=(x + w * 0.48, y + h * 0.3), size=(w * 0.1, h * 0.18))
+                Rectangle(pos=(x + w * 0.54, y + h * 0.18), size=(w * 0.1, h * 0.4))
+                Rectangle(pos=(x + w * 0.28, y + h * 0.52), size=(w * 0.28, h * 0.08))
+                Line(points=[x + w * 0.72, y + h * 0.38, x + w * 0.72, y + h * 0.52], width=dp(1.8))
+                Line(points=[x + w * 0.68, y + h * 0.42, x + w * 0.76, y + h * 0.42], width=dp(1.8))
+            else:  # minesweeper
+                Color(0.94, 0.97, 1, 0.9)
+                Line(points=[x + w * 0.24, y + h * 0.24, x + w * 0.24, y + h * 0.76], width=dp(1.5))
+                Line(points=[x + w * 0.76, y + h * 0.24, x + w * 0.76, y + h * 0.76], width=dp(1.5))
+                Line(points=[x + w * 0.24, y + h * 0.24, x + w * 0.76, y + h * 0.24], width=dp(1.5))
+                Line(points=[x + w * 0.24, y + h * 0.76, x + w * 0.76, y + h * 0.76], width=dp(1.5))
+                Line(points=[x + w * 0.5, y + h * 0.24, x + w * 0.5, y + h * 0.76], width=dp(1.5))
+                Line(points=[x + w * 0.24, y + h * 0.5, x + w * 0.76, y + h * 0.5], width=dp(1.5))
+                Color(*base, 0.9)
+                Ellipse(pos=(x + w * 0.52, y + h * 0.42), size=(w * 0.18, h * 0.18))
+                Line(points=[x + w * 0.6, y + h * 0.52, x + w * 0.64, y + h * 0.48], width=dp(1.7))
+                Line(points=[x + w * 0.6, y + h * 0.48, x + w * 0.64, y + h * 0.52], width=dp(1.7))
+
+
+class ModernGameCard(ButtonBehavior, BoxLayout):
+    def __init__(self, title, accent=(0.25, 0.82, 0.9, 1), icon='ttt', **kw):
+        super().__init__(orientation='horizontal', spacing=dp(12), padding=[dp(12), dp(10), dp(16), dp(10)], **kw)
+        self.title = title
+        self.accent = accent
+        self.icon_kind = icon
+        self.icon_widget = GameIcon(kind=icon, accent=accent, size_hint=(None, None), size=(dp(28), dp(28)))
+        icon_slot = AnchorLayout(anchor_x='center', anchor_y='center', size_hint=(None, 1), width=dp(28))
+        icon_slot.add_widget(self.icon_widget)
+        self.label = Label(text=title, bold=True, color=(0.96, 0.99, 1, 1), font_size=dp(16), halign='center', valign='middle', size_hint_x=1)
+        self.add_widget(icon_slot)
+        self.add_widget(self.label)
+        self.bind(pos=self._redraw, size=self._redraw, state=self._redraw)
+        self._redraw()
+
+    def _redraw(self, *args):
+        self.canvas.before.clear()
+        fill = self.accent
+        if self.state == 'down':
+            base = tuple(c * 0.82 for c in fill[:3]) + (1,)
+            border = tuple(min(1, c * 1.2) for c in fill[:3]) + (0.9,)
+            glow = tuple(c * 0.9 for c in fill[:3]) + (0.9,)
+        else:
+            base = tuple(min(1, c * 1.04) for c in fill[:3]) + (1,)
+            border = tuple(min(1, c * 1.12) for c in fill[:3]) + (0.75,)
+            glow = tuple(min(1, c * 0.9) for c in fill[:3]) + (0.7,)
+        with self.canvas.before:
+            Color(*base)
+            RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(18)])
+            Color(*glow)
+            RoundedRectangle(pos=(self.x + dp(2), self.y + dp(2)), size=(self.width - dp(4), self.height - dp(4)), radius=[dp(16)])
+            Color(*border)
+            Line(rounded_rectangle=(self.x, self.y, self.width, self.height, dp(18)), width=dp(1.2))
+            Color(*fill[:3], 0.72)
+            Rectangle(pos=(self.x + dp(6), self.y + dp(8)), size=(max(dp(2), self.width * 0.1), self.height - dp(16)))
+
+
+class GameCard(ModernGameCard):
+    def __init__(self, title, subtitle=None, accent=(0.12, 0.3, 0.58, 1), symbol='>', **kw):
+        icon_map = {
+            'X': 'ttt',
+            '♟': 'chess',
+            '?': 'hangman',
+            '+': 'maze',
+            '*': 'minesweeper',
+            'ttt': 'ttt',
+            'chess': 'chess',
+            'hangman': 'hangman',
+            'maze': 'maze',
+            'minesweeper': 'minesweeper',
+        }
+        kind = icon_map.get(symbol, 'ttt')
+        super().__init__(title=title, accent=accent, icon=kind, **kw)
 
 
 class IconButton(ButtonBehavior, Widget):

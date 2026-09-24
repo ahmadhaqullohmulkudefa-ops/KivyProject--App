@@ -1,7 +1,6 @@
 import random
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
-from kivy.uix.button import Button
 from kivy.uix.widget import Widget
 from kivy.clock import Clock
 from kivy.metrics import dp
@@ -97,22 +96,19 @@ class TicScreen(BgScreen):
         super().__init__(**kw)
         self.sm = sm
         self.b = [None] * 9
-        self.sk = 0; self.sb = 0
-        self.difficulty = 1
+        self.sk = 0
+        self.sb = 0
         self.locked = False
         self.gen = 0
 
         root = BoxLayout(orientation='vertical', padding=[dp(12), dp(8)], spacing=dp(8))
         root.add_widget(TopBar(sm, 'TIC TAC TOE', on_refresh=lambda *a: self.new_game()))
 
-        hdr = BoxLayout(size_hint_y=None, height=dp(48), padding=[dp(8), dp(4)], spacing=dp(6))
+        hdr = BoxLayout(size_hint_y=None, height=dp(48), padding=[dp(8), dp(4)], spacing=dp(8))
         self.lbl_k = Label(text='KAMU 0', bold=True, color=CYAN, font_size=dp(16))
-        self.btn_d = ModernButton(text='SULIT', size_hint_x=None, width=dp(84), fill=DARKBTN,
-                      color=(1, 1, 1, 1), bold=True)
-        self.btn_d.bind(on_press=lambda *a: self.toggle())
         self.lbl_v = Label(text='VS', bold=True, color=MUTED)
         self.lbl_b = Label(text='BOT 0', bold=True, color=(1, 0.42, 0.38, 1), font_size=dp(16))
-        for w in (self.lbl_k, self.btn_d, self.lbl_v, self.lbl_b):
+        for w in (self.lbl_k, self.lbl_v, self.lbl_b):
             hdr.add_widget(w)
         root.add_widget(hdr)
 
@@ -133,12 +129,6 @@ class TicScreen(BgScreen):
         self.status.text = 'Giliranmu (X)'
         self.board._draw()
 
-    def toggle(self):
-        self.difficulty = 1 - self.difficulty
-        self.sulit = self.difficulty == 1
-        self.btn_d.text = ('SEDANG', 'SULIT')[self.difficulty]
-        self.new_game()
-
     def player_move(self, i):
         if self.locked or self.b[i] is not None:
             return
@@ -158,10 +148,7 @@ class TicScreen(BgScreen):
         empty = [i for i in range(9) if self.b[i] is None]
         if not empty:
             return
-        if self.difficulty == 0 and random.random() < 0.35:
-            i = random.choice(empty)
-        else:
-            _, i = minimax(self.b, True)
+        _, i = minimax(self.b, True)
         if i is None or self.b[i] is not None:
             i = random.choice(empty)
         self.b[i] = 'O'
