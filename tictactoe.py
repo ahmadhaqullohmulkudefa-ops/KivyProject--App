@@ -1,10 +1,7 @@
 import random
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.label import Label
-from kivy.uix.widget import Widget
-from kivy.clock import Clock
-from kivy.metrics import dp
-from kivy.graphics import Color, Line, RoundedRectangle
+
+import asyncio
+import flet as ft
 
 from common import BgScreen, TopBar, ModernButton, info_popup, DARKBTN, SURFACE, MUTED, CYAN
 
@@ -40,84 +37,143 @@ def minimax(b, ai):
     return best, bm
 
 
-class TTTBoard(Widget):
-    def __init__(self, game, **kw):
-        super().__init__(**kw)
+class TTTBoard(ft.GridView):
+    def __init__(self, game):
         self.game = game
-        self._g = None
-        self.bind(pos=self._draw, size=self._draw)
-        self._draw()
+        self.selected = -1
+        self.pulse = 0
+        self.scales = [1] * 9
+        super().__init__(
+            controls=self._cells(),
+            runs_count=3,
+            spacing=8,
+            run_spacing=8,
+            child_aspect_ratio=1,
+        )
 
-    def _draw(self, *a):
-        self.canvas.clear()
-        g = self.game
-        s = min(self.width, self.height)
-        if s <= 0:
-            return
-        ox = self.x + (self.width - s) / 2
-        oy = self.y + (self.height - s) / 2
-        cell = s / 3
-        self._g = (ox, oy, cell)
-        with self.canvas:
-            Color(0.07, 0.1, 0.16, 1)
-            RoundedRectangle(pos=(ox - dp(8), oy - dp(8)), size=(s + dp(16), s + dp(16)), radius=[dp(18)])
-            Color(0.28, 0.38, 0.5, 1)
-            for i in range(4):
-                Line(points=[ox + i * cell, oy, ox + i * cell, oy + s], width=dp(2.5))
-                Line(points=[ox, oy + i * cell, ox + s, oy + i * cell], width=dp(2.5))
-            for idx, p in enumerate(g.b):
-                if p is None:
-                    continue
-                r, c = divmod(idx, 3)
-                cx = ox + c * cell + cell / 2
-                cy = oy + (2 - r) * cell + cell / 2
-                m = cell * 0.27
-                if p == 'X':
-                    Color(0.25, 0.82, 0.9, 1)
-                    Line(points=[cx - m, cy - m, cx + m, cy + m], width=dp(3.5))
-                    Line(points=[cx - m, cy + m, cx + m, cy - m], width=dp(3.5))
-                else:
-                    Color(1, 0.42, 0.38, 1)
-                    Line(circle=(cx, cy, m), width=dp(3.5))
+    def _cells(self):
+        cells = []
+        for index, mark in enumerate(self.game.b):
+            selected = index == self.selected
+            fill = "#183746" if selected else "#111B29"
+            border_color = "#41BFD1" if selected else "#35485E"
+            mark_color = CYAN if mark == "X" else "#FF7168"
+            cells.append(
+                ft.Container(
+                    content=ft.Text(
+                        mark or "",
+                        size=58,
+                        weight=ft.FontWeight.BOLD,
+                        color=mark_color,
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                    bgcolor=fill,
+                    border=ft.Border.all(2, border_color),
+                    border_radius=14,
+                    alignment=ft.Alignment(0, 0),
+                    padding=0,
+                    scale=ft.Scale(scale=self.scales[index]),
+                    animate_scale=ft.Animation(
+                        duration=200,
+                        curve=ft.AnimationCurve.EASE_OUT_BACK,
+                    ),
+                    on_click=lambda _event, cell=index: self._tap(cell),
+                    ink=True,
+                )
+            )
+        return cells
 
-    def on_touch_down(self, t):
-        if not self.collide_point(*t.pos) or self._g is None:
-            return False
-        ox, oy, cell = self._g
-        c = int((t.x - ox) // cell)
-        rb = int((t.y - oy) // cell)
-        if 0 <= c < 3 and 0 <= rb < 3:
-            self.game.player_move((2 - rb) * 3 + c)
-        return True
+    def _tap(self, index):
+        if not self.game.locked and self.game.b[index] is None:
+            self.selected = index
+            self.pulse = 1
+            self.redraw()
+        self.game.player_move(index)
+
+    def redraw(self):
+        self.controls = self._cells()
+
+    def animate_move(self, index):
+        self.scales[index] = 0.72
+        self.redraw()
+        if self.game.app_page:
+            self.game.app_page.run_task(self._restore_scale, index)
+        else:
+            self.scales[index] = 1
+            self.redraw()
+
+    async def _restore_scale(self, index):
+        await asyncio.sleep(0.03)
+        self.scales[index] = 1
+        self.redraw()
+        self.game.app_page.update()
+
+    def animate_winner(self, cells):
+        self.selected = -1
+        self.pulse = 0
+        if self.game.app_page:
+            self.game.app_page.run_task(self._pulse_winner, list(cells))
+
+    async def _pulse_winner(self, cells):
+        for index in cells:
+            self.selected = index
+            self.pulse = 1
+            self.redraw()
+            self.game.app_page.update()
+            await asyncio.sleep(0.16)
+            self.pulse = 0
+            self.redraw()
+            self.game.app_page.update()
+            await asyncio.sleep(0.12)
+        self.selected = -1
+        self.redraw()
+        self.game.app_page.update()
 
 
 class TicScreen(BgScreen):
-    def __init__(self, sm, **kw):
-        super().__init__(**kw)
-        self.sm = sm
+    def __init__(self, page, **kwargs):
+        self.app_page = page
         self.b = [None] * 9
         self.sk = 0
         self.sb = 0
         self.locked = False
         self.gen = 0
 
-        root = BoxLayout(orientation='vertical', padding=[dp(12), dp(8)], spacing=dp(8))
-        root.add_widget(TopBar(sm, 'TIC TAC TOE', on_refresh=lambda *a: self.new_game()))
-
-        hdr = BoxLayout(size_hint_y=None, height=dp(48), padding=[dp(8), dp(4)], spacing=dp(8))
-        self.lbl_k = Label(text='KAMU 0', bold=True, color=CYAN, font_size=dp(16))
-        self.lbl_v = Label(text='VS', bold=True, color=MUTED)
-        self.lbl_b = Label(text='BOT 0', bold=True, color=(1, 0.42, 0.38, 1), font_size=dp(16))
-        for w in (self.lbl_k, self.lbl_v, self.lbl_b):
-            hdr.add_widget(w)
-        root.add_widget(hdr)
-
+        self.lbl_k = ft.Text("KAMU 0", weight=ft.FontWeight.BOLD, color=CYAN, size=16)
+        self.lbl_v = ft.Text("VS", weight=ft.FontWeight.BOLD, color=MUTED)
+        self.lbl_b = ft.Text("BOT 0", weight=ft.FontWeight.BOLD, color="#FF7168", size=16)
         self.board = TTTBoard(self)
-        root.add_widget(self.board)
-        self.status = Label(text='Giliranmu (X)', color=(1, 1, 1, 1),
-                    size_hint_y=None, height=dp(34), font_size=dp(16), bold=True)
-        root.add_widget(self.status)
-        self.add_widget(root)
+        self.status = ft.Text(
+            "Giliranmu (X)",
+            color="#FFFFFF",
+            size=16,
+            weight=ft.FontWeight.BOLD,
+        )
+        board_size = min(max((getattr(page, "width", None) or 430) - 32, 280), 480)
+        content = ft.Column(
+            controls=[
+                TopBar(page, "TIC TAC TOE", on_refresh=lambda _event: self.new_game()),
+                ft.Row(
+                    controls=[self.lbl_k, self.lbl_v, self.lbl_b],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    height=48,
+                ),
+                ft.Container(
+                    content=self.board,
+                    width=board_size,
+                    height=board_size,
+                    padding=8,
+                    bgcolor="#0B111C",
+                    border_radius=18,
+                ),
+                self.status,
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=8,
+            scroll=ft.ScrollMode.AUTO,
+            expand=True,
+        )
+        super().__init__(bg="#090D17", content=content, padding=12, **kwargs)
 
     def on_enter(self):
         self.new_game()
@@ -126,21 +182,33 @@ class TicScreen(BgScreen):
         self.gen += 1
         self.b = [None] * 9
         self.locked = False
-        self.status.text = 'Giliranmu (X)'
-        self.board._draw()
+        self.status.value = "Giliranmu (X)"
+        self.board.selected = -1
+        self.board.pulse = 0
+        self.board.scales = [1] * 9
+        self.board.redraw()
+        if self.app_page:
+            self.app_page.update()
 
     def player_move(self, i):
         if self.locked or self.b[i] is not None:
             return
         self.b[i] = 'X'
-        self.board._draw()
+        self.board.animate_move(i)
+        self.board.redraw()
         w = winner(self.b)
         if w:
             self._end(w)
             return
         self.locked = True
-        self.status.text = 'Bot berpikir...'
-        Clock.schedule_once(lambda dt, g=self.gen: self.bot_move(g), 0.55)
+        self.status.value = "Bot berpikir..."
+        if self.app_page:
+            self.app_page.update()
+            self.app_page.run_task(self._delayed_bot_move, self.gen)
+
+    async def _delayed_bot_move(self, generation):
+        await asyncio.sleep(0.55)
+        self.bot_move(generation)
 
     def bot_move(self, g):
         if g != self.gen:
@@ -152,23 +220,41 @@ class TicScreen(BgScreen):
         if i is None or self.b[i] is not None:
             i = random.choice(empty)
         self.b[i] = 'O'
-        self.board._draw()
+        self.board.animate_move(i)
+        self.board.redraw()
         w = winner(self.b)
         if w:
             self._end(w)
             return
         self.locked = False
-        self.status.text = 'Giliranmu (X)'
+        self.status.value = "Giliranmu (X)"
+        if self.app_page:
+            self.app_page.update()
 
     def _end(self, w):
         self.locked = True
         if w == 'X':
-            self.sk += 1; t, m, btn, st = 'MENANG!', 'Selamat, kamu menang!', 'Main lagi', 'Kamu menang!'
+            self.sk += 1; title, message, button, status = 'MENANG!', 'Selamat, kamu menang!', 'Main lagi', 'Kamu menang!'
         elif w == 'O':
-            self.sb += 1; t, m, btn, st = 'KALAH', 'Bot menang.', 'Coba lagi', 'Bot menang.'
+            self.sb += 1; title, message, button, status = 'KALAH', 'Bot menang.', 'Coba lagi', 'Bot menang.'
         else:
-            t, m, btn, st = 'SERI', 'Permainan seri.', 'Main lagi', 'Seri.'
-        self.status.text = st
-        self.lbl_k.text = f'KAMU {self.sk}'
-        self.lbl_b.text = f'BOT {self.sb}'
-        info_popup(t, m, on_ok=self.new_game, btn=btn)
+            title, message, button, status = 'SERI', 'Permainan seri.', 'Main lagi', 'Seri.'
+        self.status.value = status
+        self.lbl_k.value = f"KAMU {self.sk}"
+        self.lbl_b.value = f"BOT {self.sb}"
+        if w in ('X', 'O'):
+            winning_cells = next(line for line in LINES if all(self.b[index] == w for index in line))
+            self.board.animate_winner(winning_cells)
+        if self.app_page:
+            self.app_page.update()
+            self.app_page.run_task(self._delayed_result_dialog, title, message, button)
+
+    async def _delayed_result_dialog(self, title, message, button):
+        await asyncio.sleep(0.62)
+        info_popup(
+            self.app_page,
+            title,
+            message,
+            on_ok=self.new_game,
+            btn=button,
+        )

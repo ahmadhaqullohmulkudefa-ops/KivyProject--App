@@ -1,38 +1,49 @@
 import random
 from collections import deque
 
-from kivy.metrics import dp
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.gridlayout import GridLayout
-from kivy.uix.label import Label
-from kivy.uix.widget import Widget
+import flet as ft
 
 from database import DatabaseManager
 from common import BgScreen, DARKBTN, CYAN, MUTED, ORANGE, TopBar, ModernButton, info_popup
 
 
-class MineCell(ModernButton):
-    def __init__(self, game, row, col, **kwargs):
-        super().__init__(fill=(0.12, 0.2, 0.3, 1), **kwargs)
+class MineCell(ft.Container):
+    def __init__(self, game, row, col):
         self.game = game
-        self.row = row
-        self.col = col
-        self.font_size = dp(14)
-        self.bold = True
-        self.color = (1, 1, 1, 1)
-        self.bind(on_press=self._pressed)
+        self.row_index = row
+        self.column_index = col
+        self.label = ft.Text(
+            "",
+            size=14,
+            weight=ft.FontWeight.BOLD,
+            color="#FFFFFF",
+            text_align=ft.TextAlign.CENTER,
+        )
+        super().__init__(
+            content=self.label,
+            bgcolor="#1F344D",
+            alignment=ft.Alignment(0, 0),
+            padding=0,
+            border_radius=5,
+            on_click=self._pressed,
+            ink=True,
+        )
 
-    def _pressed(self, *_):
+    def _pressed(self, _event=None):
         if self.game.flag_mode:
-            self.game.toggle_flag(self.row, self.col)
+            self.game.toggle_flag(self.row_index, self.column_index)
         else:
-            self.game.reveal(self.row, self.col)
+            self.game.reveal(self.row_index, self.column_index)
+
+    def set_visual(self, text, color, fill):
+        self.label.value = text
+        self.label.color = color
+        self.bgcolor = fill
 
 
 class MinesweeperScreen(BgScreen):
-    def __init__(self, sm, **kwargs):
-        super().__init__(bg=(0.035, 0.05, 0.09, 1), **kwargs)
-        self.sm = sm
+    def __init__(self, page, **kwargs):
+        self.app_page = page
         self.db = DatabaseManager()
         self.rows = 9
         self.mines = 10
@@ -45,41 +56,74 @@ class MinesweeperScreen(BgScreen):
         self.counts = []
         self.stats = self.db.get_minesweeper_stats()
 
-        root = BoxLayout(orientation='vertical', padding=[dp(10), dp(8)], spacing=dp(8))
-        root.add_widget(TopBar(sm, 'MINESWEEPER', on_refresh=self.new_game))
-
-        info = BoxLayout(size_hint_y=None, height=dp(36), spacing=dp(8))
-        self.mine_label = Label(text='MINE: 10', color=CYAN, bold=True, font_size=dp(13))
-        self.flag_label = Label(text='FLAG: 0', color=(1, 1, 1, 1), bold=True, font_size=dp(13))
-        self.streak_label = Label(text='WIN STREAK: 0\nBEST: 0', color=(1, 1, 1, 1),
-                                 bold=True, font_size=dp(12), size_hint_x=None)
-        info.add_widget(self.mine_label)
-        info.add_widget(self.flag_label)
-        info.add_widget(self.streak_label)
-        root.add_widget(info)
-
-        self.status = Label(text='Buka semua cell yang aman', color=(0.95, 0.98, 1, 1), bold=True,
-                            font_size=dp(12), size_hint_y=None, height=dp(24))
-        root.add_widget(self.status)
-
-        self.board_grid = GridLayout(cols=self.rows, spacing=dp(2), padding=dp(3),
-                                     size_hint=(1, 1), minimum_size=(dp(250), dp(250)))
-        root.add_widget(self.board_grid)
-
-        controls = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
-        self.flag_button = ModernButton(text='TANDAI FLAG', fill=(0.1, 0.3, 0.42, 1),
-                                        color=(1, 1, 1, 1), bold=True)
-        self.flag_button.bind(on_press=lambda *_: self.toggle_flag_mode())
-        restart = ModernButton(text='RESTART', fill=ORANGE, color=(0.08, 0.1, 0.15, 1), bold=True)
-        restart.bind(on_press=lambda *_: self.new_game())
-        controls.add_widget(self.flag_button)
-        controls.add_widget(restart)
-        root.add_widget(controls)
-        self.add_widget(root)
+        self.mine_label = ft.Text("MINE: 10", color=CYAN, size=13, weight=ft.FontWeight.BOLD)
+        self.flag_label = ft.Text("FLAG: 0", color="#FFFFFF", size=13, weight=ft.FontWeight.BOLD)
+        self.streak_label = ft.Text(
+            "WIN STREAK: 0\nBEST: 0",
+            color="#FFFFFF",
+            size=12,
+            weight=ft.FontWeight.BOLD,
+            text_align=ft.TextAlign.RIGHT,
+        )
+        self.status = ft.Text(
+            "Buka semua cell yang aman",
+            color="#F2F7FC",
+            size=13,
+            weight=ft.FontWeight.BOLD,
+        )
+        self.board_grid = ft.GridView(
+            controls=[],
+            runs_count=self.rows,
+            spacing=3,
+            run_spacing=3,
+            child_aspect_ratio=1,
+            expand=True,
+        )
+        self.flag_button = ModernButton(
+            text="TANDAI FLAG",
+            fill="#194D6B",
+            color="#FFFFFF",
+            bold=True,
+            expand=True,
+            on_click=lambda _event: self.toggle_flag_mode(),
+        )
+        restart = ModernButton(
+            text="RESTART",
+            fill=ORANGE,
+            color="#17130D",
+            bold=True,
+            expand=True,
+            on_click=lambda _event: self.new_game(),
+        )
+        board_size = min(max((getattr(page, "width", None) or 430) - 32, 270), 540)
+        content = ft.Column(
+            controls=[
+                TopBar(page, "MINESWEEPER", on_refresh=self.new_game),
+                ft.Row(
+                    controls=[self.mine_label, self.flag_label, self.streak_label],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    height=42,
+                ),
+                self.status,
+                ft.Container(
+                    content=self.board_grid,
+                    width=board_size,
+                    height=board_size,
+                ),
+                ft.Row(controls=[self.flag_button, restart], spacing=8),
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=8,
+            scroll=ft.ScrollMode.AUTO,
+            expand=True,
+        )
+        super().__init__(bg="#090D17", content=content, padding=10, **kwargs)
+        self.new_game()
 
     def _go_menu(self):
-        self.sm.transition.direction = 'right'
-        self.sm.current = 'menu'
+        if hasattr(self.app_page, "navigate"):
+            self.app_page.navigate("/")
 
     def on_enter(self):
         self.stats = self.db.get_minesweeper_stats()
@@ -87,11 +131,15 @@ class MinesweeperScreen(BgScreen):
         self.new_game()
 
     def _update_streak_label(self):
-        self.streak_label.text = f"WIN STREAK: {self.stats.get('current_streak', 0)}\nBEST: {self.stats.get('best_streak', 0)}"
+        self.streak_label.value = (
+            f"WIN STREAK: {self.stats.get('current_streak', 0)}\n"
+            f"BEST: {self.stats.get('best_streak', 0)}"
+        )
 
     def new_game(self, *_):
         self.flag_mode = False
-        self.flag_button.text = 'TANDAI FLAG'
+        self.flag_button.text = "TANDAI FLAG"
+        self.flag_button.content.value = "TANDAI FLAG"
         self.finished = False
         self.flags = set()
         self.revealed = [[False] * self.rows for _ in range(self.rows)]
@@ -109,37 +157,33 @@ class MinesweeperScreen(BgScreen):
                    if (nr, nc) != (row, col))
 
     def _build_board(self):
-        self.board_grid.clear_widgets()
-        self.board_grid.cols = self.rows
         self.cells = []
         for row in range(self.rows):
             for col in range(self.rows):
-                cell = MineCell(self, row, col, text='')
+                cell = MineCell(self, row, col)
                 self.cells.append(cell)
-                self.board_grid.add_widget(cell)
+        self.board_grid.controls = self.cells
 
     def _cell(self, row, col):
         return self.cells[row * self.rows + col]
 
     def _refresh(self):
-        self.mine_label.text = f'MINE: {self.mines - len(self.flags)}'
-        self.flag_label.text = f'FLAG: {len(self.flags)}'
+        self.mine_label.value = f"MINE: {self.mines - len(self.flags)}"
+        self.flag_label.value = f"FLAG: {len(self.flags)}"
         for row in range(self.rows):
             for col in range(self.rows):
                 cell = self._cell(row, col)
                 if (row, col) in self.flags:
-                    cell.text = 'F'
-                    cell.color = (1, 0.82, 0.25, 1)
-                    cell.fill = (0.35, 0.22, 0.08, 1)
+                    cell.set_visual("F", "#FFD166", "#593D14")
                 elif self.revealed[row][col]:
-                    cell.text = '*' if self.board[row][col] else (str(self.counts[row][col]) if self.counts[row][col] else '')
-                    cell.color = (1, 0.35, 0.3, 1) if self.board[row][col] else (0.08, 0.12, 0.18, 1)
-                    cell.fill = (0.55, 0.12, 0.14, 1) if self.board[row][col] else (0.52, 0.62, 0.7, 1)
+                    text = "*" if self.board[row][col] else (
+                        str(self.counts[row][col]) if self.counts[row][col] else ""
+                    )
+                    color = "#FF655C" if self.board[row][col] else "#13202D"
+                    fill = "#8C2529" if self.board[row][col] else "#849EAF"
+                    cell.set_visual(text, color, fill)
                 else:
-                    cell.text = ''
-                    cell.color = (1, 1, 1, 1)
-                    cell.fill = (0.12, 0.2, 0.3, 1)
-                cell._redraw()
+                    cell.set_visual("", "#FFFFFF", "#1F344D")
 
     def reveal(self, row, col):
         if self.finished or (row, col) in self.flags or self.revealed[row][col]:
@@ -178,7 +222,9 @@ class MinesweeperScreen(BgScreen):
         if self.finished:
             return
         self.flag_mode = not self.flag_mode
-        self.flag_button.text = 'BUKA CELL' if self.flag_mode else 'TANDAI FLAG'
+        label = "BUKA CELL" if self.flag_mode else "TANDAI FLAG"
+        self.flag_button.text = label
+        self.flag_button.content.value = label
 
     def _finish(self, won):
         self.finished = True
@@ -186,8 +232,14 @@ class MinesweeperScreen(BgScreen):
             self.db.record_minesweeper_win()
             self.stats = self.db.get_minesweeper_stats()
             self._update_streak_label()
-            self.status.text = 'MENANG! Semua mine berhasil dihindari.'
-            info_popup('MENANG!', 'Papan berhasil diselesaikan.', on_ok=self.new_game, btn='Main lagi')
+            self.status.value = "MENANG! Semua mine berhasil dihindari."
+            info_popup(
+                self.app_page,
+                "MENANG!",
+                "Papan berhasil diselesaikan.",
+                on_ok=self.new_game,
+                btn="Main lagi",
+            )
         else:
             self.db.record_minesweeper_loss()
             self.stats = self.db.get_minesweeper_stats()
@@ -197,5 +249,11 @@ class MinesweeperScreen(BgScreen):
                     if self.board[row][col]:
                         self.revealed[row][col] = True
             self._refresh()
-            self.status.text = 'GAME OVER'
-            info_popup('GAME OVER', 'Kamu membuka cell berisi mine.', on_ok=self.new_game, btn='Coba lagi')
+            self.status.value = "GAME OVER"
+            info_popup(
+                self.app_page,
+                "GAME OVER",
+                "Kamu membuka cell berisi mine.",
+                on_ok=self.new_game,
+                btn="Coba lagi",
+            )

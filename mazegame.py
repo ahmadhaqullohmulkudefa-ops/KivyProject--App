@@ -1,13 +1,9 @@
+import asyncio
+import base64
 import random
 from collections import deque
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.gridlayout import GridLayout
-from kivy.uix.label import Label
-from kivy.uix.widget import Widget
-from kivy.clock import Clock
-from kivy.core.window import Window
-from kivy.metrics import dp
-from kivy.graphics import Color, Line, Ellipse, Rectangle, InstructionGroup
+
+import flet as ft
 
 from database import DatabaseManager
 from common import BgScreen, TopBar, IconButton, ModernButton, info_popup, Hearts, CYAN, MUTED
@@ -64,122 +60,184 @@ def solve(walls, start, goal, rows, cols):
     return path if path and path[0] == start else []
 
 
-class MazeBoard(Widget):
-    def __init__(self, screen, **kw):
-        super().__init__(**kw)
+class MazeBoard(ft.Image):
+    def __init__(self, screen, width, height):
         self.screen = screen
-        self.hint_grp = None
-        self.bind(pos=self._draw, size=self._draw)
+        self.hint_path = []
+        super().__init__(
+            src="",
+            width=width,
+            height=height,
+            fit=ft.BoxFit.CONTAIN,
+            anti_alias=True,
+        )
+        self.redraw()
 
-    def _draw(self, *a):
-        self.canvas.clear()
-        self.hint_grp = None
-        scr = self.screen
-        if scr.walls is None:
+    def redraw(self):
+        screen = self.screen
+        if screen.walls is None:
             return
-        rows, cols = scr.rows, scr.cols
-        cell = min(self.width / cols, self.height / rows)
-        if cell <= 0:
-            return
-        ox = self.x + (self.width - cell * cols) / 2
-        oy = self.y + (self.height - cell * rows) / 2
-        with self.canvas:
-            Color(0.32, 0.55, 0.62, 1)
-            for r in range(rows):
-                for c in range(cols):
-                    x = ox + c * cell
-                    y = oy + (rows - 1 - r) * cell
-                    ws = scr.walls[r][c]
-                    if ws[0]:
-                        Line(points=[x, y + cell, x + cell, y + cell], width=dp(1.6))
-                    if ws[2]:
-                        Line(points=[x, y, x + cell, y], width=dp(1.6))
-                    if ws[3]:
-                        Line(points=[x, y, x, y + cell], width=dp(1.6))
-                    if ws[1]:
-                        Line(points=[x + cell, y, x + cell, y + cell], width=dp(1.6))
-            ex, ey = ox + (cols - 1) * cell, oy + (rows - 1) * cell
-            Color(0.2, 0.85, 0.3, 1)
-            Ellipse(pos=(ex + cell * 0.2, ey + cell * 0.2), size=(cell * 0.6, cell * 0.6))
-            pr, pc = scr.pos_
-            px = ox + pc * cell
-            py = oy + (rows - 1 - pr) * cell
-            Color(1, 0.6, 0.1, 1)
-            Ellipse(pos=(px + cell * 0.25, py + cell * 0.25), size=(cell * 0.5, cell * 0.5))
-            Color(1, 1, 1, 1)
-            Ellipse(pos=(px + cell * 0.38, py + cell * 0.38), size=(cell * 0.24, cell * 0.24))
+        rows, cols = screen.rows, screen.cols
+        unit = 100
+        wall_segments = []
+        for row in range(rows):
+            for column in range(cols):
+                x, y = column * unit, row * unit
+                cell_walls = screen.walls[row][column]
+                if cell_walls[0]:
+                    wall_segments.append(f"M{x} {y}h{unit}")
+                if cell_walls[1]:
+                    wall_segments.append(f"M{x + unit} {y}v{unit}")
+                if cell_walls[2]:
+                    wall_segments.append(f"M{x} {y + unit}h{unit}")
+                if cell_walls[3]:
+                    wall_segments.append(f"M{x} {y}v{unit}")
+
+        goal_x, goal_y = (cols - 0.5) * unit, unit / 2
+        player_row, player_column = screen.pos_
+        player_x = (player_column + 0.5) * unit
+        player_y = (player_row + 0.5) * unit
+        hint = ""
+        if self.hint_path:
+            points = " ".join(
+                f"{(column + 0.5) * unit},{(row + 0.5) * unit}"
+                for row, column in self.hint_path
+            )
+            hint = (
+                f'<polyline points="{points}" fill="none" stroke="#FFD34E" '
+                'stroke-width="12" stroke-linecap="round" stroke-linejoin="round" '
+                'stroke-dasharray="18 18" opacity="0.9"/>'
+            )
+        svg = (
+            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {cols * unit} {rows * unit}">'
+            f'<rect width="{cols * unit}" height="{rows * unit}" fill="#111B29"/>'
+            f'<path d="{" ".join(wall_segments)}" fill="none" stroke="#68A5B4" '
+            'stroke-width="8" stroke-linecap="square"/>'
+            f'<circle cx="{goal_x}" cy="{goal_y}" r="29" fill="#41C879"/>'
+            f'{hint}'
+            f'<circle cx="{player_x}" cy="{player_y}" r="29" fill="#FF9638"/>'
+            f'<circle cx="{player_x}" cy="{player_y}" r="11" fill="#FFF8EB"/>'
+            '</svg>'
+        )
+        self.src = "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode("ascii")
 
     def show_hint(self, path):
-        cell = min(self.width / self.screen.cols, self.height / self.screen.rows)
-        ox = self.x + (self.width - cell * self.screen.cols) / 2
-        oy = self.y + (self.height - cell * self.screen.rows) / 2
-        pts = []
-        for (r, c) in path:
-            pts += [ox + c * cell + cell / 2,
-                    oy + (self.screen.rows - 1 - r) * cell + cell / 2]
-        grp = InstructionGroup()
-        grp.add(Color(1, 0.9, 0.2, 1))
-        grp.add(Line(points=pts, width=dp(2.5), dash_length=dp(6), dash_offset=dp(3)))
-        self.hint_grp = grp
-        self.canvas.add(grp)
-        Clock.schedule_once(self.hide_hint, 2.5)
+        self.hint_path = path
+        self.redraw()
+        self.screen.app_page.run_task(self._hide_hint_after, 2.5)
 
-    def hide_hint(self, *a):
-        if self.hint_grp:
-            self.canvas.remove(self.hint_grp)
-            self.hint_grp = None
+    async def _hide_hint_after(self, seconds):
+        await asyncio.sleep(seconds)
+        self.hide_hint()
+
+    def hide_hint(self, *_args):
+        if self.hint_path:
+            self.hint_path = []
+            self.redraw()
 
 
 class MazeScreen(BgScreen):
-    def __init__(self, sm, **kw):
-        super().__init__(bg=(0.13, 0.12, 0.16, 1), **kw)
-        self.sm = sm
+    def __init__(self, page, **kwargs):
+        self.app_page = page
         self.db = DatabaseManager()
         self.di = 0
         self.level = 1
         self.highest_level = 1
         self.walls = None
         self.progress = self.db.get_maze_progress()
+        self.level = int(self.progress.get("current_level") or 1)
+        self.highest_level = int(self.progress.get("highest_level") or self.level)
 
-        root = BoxLayout(orientation='vertical', padding=[dp(12), dp(8)], spacing=dp(7))
-        root.add_widget(TopBar(sm, 'LABIRIN'))
+        self.lbl_l = ft.Text("Level 1", color=CYAN, size=18, weight=ft.FontWeight.BOLD)
+        self.hearts = Hearts(n=3, total=3)
+        self.status = ft.Text("Capai lingkaran hijau!", color=MUTED, weight=ft.FontWeight.BOLD)
+        _, maze_cols, maze_rows = DIFFS[self.di]
+        viewport_width = getattr(page, "width", None) or 414
+        viewport_height = getattr(page, "height", None) or 768
+        available_width = max(1, viewport_width - 48)
+        available_height = max(180, viewport_height - 332)
+        board_width = min(available_width, available_height * maze_cols / maze_rows)
+        board_height = board_width * maze_rows / maze_cols
+        self.board = MazeBoard(self, board_width, board_height)
+        self.hint_btn = IconButton(
+            sym="bulb",
+            bg="#FFD166",
+            fg="#49320B",
+            width=50,
+            height=50,
+            on_click=lambda _event: self.hint(),
+        )
+        self.controls_row = ft.Column(
+            controls=[
+                ft.Row(
+                    controls=[ft.Container(width=52), self._direction_button("up", 0),
+                              ft.Container(width=52)],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    spacing=8,
+                ),
+                ft.Row(
+                    controls=[
+                        self._direction_button("left", 3),
+                        self._direction_button("down", 2),
+                        self._direction_button("right", 1),
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    spacing=8,
+                ),
+            ],
+            spacing=5,
+        )
+        self.board_slot = ft.Container(
+            content=self.board,
+            expand=True,
+            alignment=ft.Alignment(0, 0),
+            on_size_change=self._fit_board,
+        )
+        content = ft.Column(
+            controls=[
+                TopBar(page, "LABIRIN"),
+                ft.Row(
+                    controls=[self.lbl_l, self.hearts],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    height=46,
+                ),
+                self.board_slot,
+                ft.Row(controls=[self.hint_btn], alignment=ft.MainAxisAlignment.END),
+                self.controls_row,
+                self.status,
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=7,
+            expand=True,
+        )
+        super().__init__(bg="#211E29", content=content, padding=12, **kwargs)
+        if self.app_page:
+            self.app_page.on_keyboard_event = self._key
+        self.start()
 
-        hdr = BoxLayout(size_hint_y=None, height=dp(48), padding=[dp(8), dp(4)], spacing=dp(8))
-        self.lbl_l = Label(text='Level 1', color=CYAN, bold=True, font_size=dp(18))
-        self.hearts = Hearts(size_hint_x=None, width=dp(110))
-        hdr.add_widget(self.lbl_l); hdr.add_widget(self.hearts)
-        root.add_widget(hdr)
+    def _direction_button(self, symbol, direction):
+        return IconButton(
+            sym=symbol,
+            width=52,
+            height=52,
+            on_click=lambda _event: self.move(direction),
+        )
 
-        self.board = MazeBoard(self)
-        root.add_widget(self.board)
-
-        hint_row = BoxLayout(size_hint_y=None, height=dp(54), padding=[dp(8), dp(3)])
-        self.hint_btn = IconButton(sym='bulb', bg=(1, 0.85, 0.25, 1), fg=(0.35, 0.25, 0.05, 1),
-                                   size_hint=(None, None), size=(dp(52), dp(52)),
-                                   pos_hint={'right': 1})
-        self.hint_btn.bind(on_press=lambda *a: self.hint())
-        hint_row.add_widget(Widget())
-        hint_row.add_widget(self.hint_btn)
-        root.add_widget(hint_row)
-
-        ctr = GridLayout(cols=3, size_hint_y=None, height=dp(82),
-                        spacing=dp(3), padding=[dp(84), dp(2)])
-        up = IconButton(sym='up', size_hint=(1, None), height=dp(34))
-        up.bind(on_press=lambda *a: self.move(0))
-        ctr.add_widget(Widget()); ctr.add_widget(up); ctr.add_widget(Widget())
-        for sym, di in (('left', 3), ('down', 2), ('right', 1)):
-            b = IconButton(sym=sym, size_hint=(1, None), height=dp(34))
-            b.bind(on_press=lambda inst, d=di: self.move(d))
-            ctr.add_widget(b)
-        root.add_widget(ctr)
-
-        self.status = Label(text='Capai lingkaran hijau!', color=MUTED,
-                           size_hint_y=None, height=dp(30), bold=True)
-        root.add_widget(self.status)
-        self.add_widget(root)
+    def _fit_board(self, event):
+        available_width = max(0, event.width)
+        available_height = max(0, event.height)
+        board_width = min(available_width, available_height * self.cols / self.rows)
+        board_height = board_width * self.rows / self.cols
+        if board_width <= 0 or board_height <= 0:
+            return
+        if self.board.width != board_width or self.board.height != board_height:
+            self.board.width = board_width
+            self.board.height = board_height
+            if self.board.page:
+                self.board.update()
 
     def on_enter(self):
-        Window.bind(on_key_down=self._key)
         self.progress = self.db.get_maze_progress()
         self.level = int(self.progress.get('current_level') or 1)
         self.highest_level = int(self.progress.get('highest_level') or self.level)
@@ -187,14 +245,19 @@ class MazeScreen(BgScreen):
 
     def on_leave(self):
         self.db.save_maze_progress(self.level, self.highest_level)
-        Window.unbind(on_key_down=self._key)
+        if self.app_page:
+            self.app_page.on_keyboard_event = None
 
-    def _key(self, win, key, *a):
-        m = {273: 0, 275: 1, 274: 2, 276: 3}
-        if key in m:
-            self.move(m[key])
-            return True
-        return False
+    def _key(self, event):
+        key = event.key.lower()
+        directions = {
+            "arrow up": 0, "arrowup": 0,
+            "arrow right": 1, "arrowright": 1,
+            "arrow down": 2, "arrowdown": 2,
+            "arrow left": 3, "arrowleft": 3,
+        }
+        if key in directions:
+            self.move(directions[key])
 
     def start(self):
         _, cols, rows = DIFFS[self.di]
@@ -202,8 +265,8 @@ class MazeScreen(BgScreen):
         self.walls = gen_maze(rows, cols)
         self.pos_ = (rows - 1, 0)
         self.hearts.n = 3
-        self.lbl_l.text = f'Level {self.level}'
-        self.board._draw()
+        self.lbl_l.value = f"Level {self.level}"
+        self.board.redraw()
 
     def move(self, di):
         if self.walls is None:
@@ -215,22 +278,27 @@ class MazeScreen(BgScreen):
         if 0 <= rr < self.rows and 0 <= cc < self.cols:
             self.pos_ = (rr, cc)
             self.board.hide_hint()
-            self.board._draw()
+            self.board.redraw()
             if self.pos_ == (0, self.cols - 1):
                 self.highest_level = max(self.highest_level, self.level + 1)
                 self.db.save_maze_progress(self.level + 1, self.highest_level)
                 self.level += 1
-                self.lbl_l.text = f'Level {self.level}'
-                info_popup('SELESAI!', f'Level selesai! Lanjut ke level {self.level}.',
-                           on_ok=self.start, btn='Lanjut')
+                self.lbl_l.value = f"Level {self.level}"
+                info_popup(
+                    self.app_page,
+                    "SELESAI!",
+                    f"Level selesai! Lanjut ke level {self.level}.",
+                    on_ok=self.start,
+                    btn="Lanjut",
+                )
 
     def hint(self):
         if self.walls is None:
             return
         if self.hearts.n <= 0:
-            self.status.text = 'Petunjuk habis!'
+            self.status.value = "Petunjuk habis!"
             return
         self.hearts.n -= 1
         path = solve(self.walls, self.pos_, (0, self.cols - 1), self.rows, self.cols)
         self.board.show_hint(path)
-        self.status.text = 'Ikuti garis kuning!'
+        self.status.value = "Ikuti garis kuning!"

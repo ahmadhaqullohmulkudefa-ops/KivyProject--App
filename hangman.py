@@ -1,12 +1,8 @@
+import asyncio
+import base64
 import random
 
-from kivy.graphics import Color, Line, Ellipse
-from kivy.metrics import dp
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.button import Button
-from kivy.uix.gridlayout import GridLayout
-from kivy.uix.label import Label
-from kivy.uix.widget import Widget
+import flet as ft
 
 from database import DatabaseManager
 from common import BgScreen, DARKBTN, ORANGE, TopBar, ModernButton, info_popup, CYAN, MUTED
@@ -24,82 +20,135 @@ WORDS = (
 LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 
-class Gallows(Widget):
+class Gallows(ft.Image):
     def __init__(self, game, **kwargs):
-        super().__init__(**kwargs)
         self.game = game
-        self.bind(pos=self.draw, size=self.draw)
+        self.reveal = 0
+        super().__init__(
+            src="",
+            width=280,
+            height=205,
+            fit=ft.BoxFit.CONTAIN,
+            anti_alias=True,
+            **kwargs,
+        )
+        self.draw()
 
-    def draw(self, *args):
-        self.canvas.clear()
-        wrong = self.game.wrong
-        if self.width <= 0 or self.height <= 0:
-            return
-        left = self.x + self.width * 0.22
-        base = self.y + self.height * 0.16
-        top = self.y + self.height * 0.82
-        pole = self.x + self.width * 0.5
-        with self.canvas:
-            Color(0.92, 0.78, 0.48, 1)
-            Line(points=[left, base, self.x + self.width * 0.78, base], width=dp(4))
-            Line(points=[left + dp(12), base, left + dp(12), top], width=dp(4))
-            Line(points=[left + dp(12), top, pole, top], width=dp(4))
-            Line(points=[pole, top, pole, top - dp(28)], width=dp(3))
-            Color(0.95, 0.32, 0.26, 1)
-            if wrong >= 1:
-                Ellipse(pos=(pole - dp(18), top - dp(64)), size=(dp(36), dp(36)))
-            if wrong >= 2:
-                Line(points=[pole, top - dp(64), pole, top - dp(132)], width=dp(4))
-            if wrong >= 3:
-                Line(points=[pole, top - dp(82), pole - dp(34), top - dp(108)], width=dp(4))
-            if wrong >= 4:
-                Line(points=[pole, top - dp(82), pole + dp(34), top - dp(108)], width=dp(4))
-            if wrong >= 5:
-                Line(points=[pole, top - dp(132), pole - dp(30), top - dp(178)], width=dp(4))
-            if wrong >= 6:
-                Line(points=[pole, top - dp(132), pole + dp(30), top - dp(178)], width=dp(4))
+    def animate_new_part(self):
+        target = self.game.wrong
+        self.reveal = max(0, target - 1)
+        self.draw()
+        if self.game.app_page:
+            self.game.app_page.run_task(self._reveal_parts, target)
+        else:
+            self.reveal = target
+            self.draw()
+
+    async def _reveal_parts(self, target):
+        while self.reveal < target:
+            await asyncio.sleep(0.04)
+            self.reveal += 1
+            self.draw()
+            if self.page:
+                self.update()
+
+    def draw(self, *_args):
+        parts = [
+            '<circle cx="165" cy="62" r="18"/>',
+            '<path d="M165 80 V132"/>',
+            '<path d="M165 91 L132 112"/>',
+            '<path d="M165 91 L198 112"/>',
+            '<path d="M165 132 L137 171"/>',
+            '<path d="M165 132 L193 171"/>',
+        ]
+        body = "".join(parts[:self.reveal])
+        svg = (
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 210">'
+            '<g fill="none" stroke="#EBC979" stroke-width="6" stroke-linecap="round" '
+            'stroke-linejoin="round"><path d="M45 188 H235 M64 188 V24 H165 V42"/></g>'
+            f'<g fill="none" stroke="#F25347" stroke-width="5" stroke-linecap="round" '
+            f'stroke-linejoin="round">{body}</g></svg>'
+        )
+        self.src = "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode("ascii")
 
 
 class HangmanScreen(BgScreen):
-    def __init__(self, sm, **kwargs):
-        super().__init__(bg=(0.07, 0.12, 0.22, 1), **kwargs)
-        self.sm = sm
+    def __init__(self, page, **kwargs):
+        self.app_page = page
         self.db = DatabaseManager()
-        self.word = ''
+        self.word = ""
         self.guessed = set()
         self.wrong = 0
         self.finished = False
         self.used_words = set()
         self.stats = self.db.get_hangman_stats()
 
-        root = BoxLayout(orientation='vertical', padding=[dp(12), dp(8)], spacing=dp(7))
-        root.add_widget(TopBar(sm, 'HANGMAN', on_refresh=self.new_game))
-        self.progress = Label(text='', color=CYAN, bold=True, font_size=dp(22),
-                              size_hint_y=None, height=dp(42))
-        root.add_widget(self.progress)
-        self.hint = Label(text='Tebak kata sebelum enam kesalahan.', color=MUTED,
-                          font_size=dp(13), size_hint_y=None, height=dp(24))
-        root.add_widget(self.hint)
-        self.streak_label = Label(text='WIN STREAK: 0\nBEST: 0', color=(1, 1, 1, 1),
-                                   bold=True, font_size=dp(14),
-                                   size_hint_y=None, height=dp(42))
-        root.add_widget(self.streak_label)
+        self.progress = ft.Text("", color=CYAN, weight=ft.FontWeight.BOLD, size=22)
+        self.hint = ft.Text("Tebak kata sebelum enam kesalahan.", color=MUTED, size=13)
+        self.streak_label = ft.Text(
+            "WIN STREAK: 0\nBEST: 0",
+            color="#FFFFFF",
+            weight=ft.FontWeight.BOLD,
+            size=14,
+            text_align=ft.TextAlign.CENTER,
+        )
         self.gallows = Gallows(self)
-        root.add_widget(self.gallows)
-        self.status = Label(text='Pilih sebuah huruf', color=(1, 0.82, 0.42, 1), bold=True,
-                            size_hint_y=None, height=dp(30))
-        root.add_widget(self.status)
-
-        self.keyboard = GridLayout(cols=7, spacing=dp(4), padding=[dp(4), dp(2)])
+        self.status = ft.Text(
+            "Pilih sebuah huruf",
+            color="#FFD16B",
+            weight=ft.FontWeight.BOLD,
+        )
         self.keys = {}
+        key_controls = []
+        viewport_width = getattr(page, "width", None) or 414
+        key_width = min(54, max(42, (viewport_width - 54) / 7))
         for letter in LETTERS:
-            key = ModernButton(text=letter, fill=DARKBTN, color=(1, 1, 1, 1),
-                               bold=True, font_size=dp(14))
-            key.bind(on_press=lambda button, value=letter: self.guess(value))
+            key = ModernButton(
+                text=letter,
+                fill=DARKBTN,
+                color="#FFFFFF",
+                bold=True,
+                font_size=17,
+                height=44,
+                on_click=lambda _event, value=letter: self.guess(value),
+            )
             self.keys[letter] = key
-            self.keyboard.add_widget(key)
-        root.add_widget(self.keyboard)
-        self.add_widget(root)
+            key_controls.append(key)
+        self.keyboard = ft.GridView(
+            controls=key_controls,
+            runs_count=7,
+            spacing=5,
+            run_spacing=5,
+            child_aspect_ratio=key_width / 44,
+            height=191,
+            on_size_change=self._fit_keyboard,
+        )
+
+        content = ft.Column(
+            controls=[
+                TopBar(page, "HANGMAN", on_refresh=self.new_game),
+                self.progress,
+                self.hint,
+                self.streak_label,
+                self.gallows,
+                self.status,
+                self.keyboard,
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=7,
+            scroll=ft.ScrollMode.AUTO,
+        )
+        super().__init__(bg="#121F38", content=content, padding=12, **kwargs)
+        self._update_streak_label()
+        self.new_game()
+
+    def _fit_keyboard(self, event):
+        key_width = min(54, max(42, (event.width - 30) / 7))
+        aspect_ratio = key_width / 44
+        if abs(self.keyboard.child_aspect_ratio - aspect_ratio) > 0.01:
+            self.keyboard.child_aspect_ratio = aspect_ratio
+            if self.keyboard.page:
+                self.keyboard.update()
 
     def on_enter(self):
         self.stats = self.db.get_hangman_stats()
@@ -107,9 +156,12 @@ class HangmanScreen(BgScreen):
         self.new_game()
 
     def _update_streak_label(self):
-        self.streak_label.text = f"WIN STREAK: {self.stats.get('current_streak', 0)}\nBEST: {self.stats.get('best_streak', 0)}"
+        self.streak_label.value = (
+            f"WIN STREAK: {self.stats.get('current_streak', 0)}\n"
+            f"BEST: {self.stats.get('best_streak', 0)}"
+        )
 
-    def new_game(self, *args):
+    def new_game(self, *_args):
         available = [word for word in WORDS if word not in self.used_words]
         if not available:
             self.used_words.clear()
@@ -122,15 +174,18 @@ class HangmanScreen(BgScreen):
         self.guessed.update(self.auto_disabled)
         self.wrong = 0
         self.finished = False
-        for key in self.keys.values():
-            key.disabled = key.text in self.auto_disabled
-            key.fill = (0.12, 0.15, 0.2, 1) if key.disabled else DARKBTN
-            key._redraw()
-        self.status.text = 'Pilih sebuah huruf'
+        self.gallows.reveal = 0
+        self.gallows.draw()
+        for letter, key in self.keys.items():
+            key.disabled = letter in self.auto_disabled
+            key.set_fill("#1F2633" if key.disabled else DARKBTN)
+        self.status.value = "Pilih sebuah huruf"
         self.refresh()
 
     def refresh(self):
-        self.progress.text = ' '.join(letter if letter in self.guessed else '_' for letter in self.word)
+        self.progress.value = " ".join(
+            letter if letter in self.guessed else "_" for letter in self.word
+        )
         self.gallows.draw()
 
     def guess(self, letter):
@@ -140,14 +195,15 @@ class HangmanScreen(BgScreen):
         key = self.keys[letter]
         key.disabled = True
         if letter in self.word:
-            key.fill = (0.12, 0.55, 0.34, 1)
-            self.status.text = 'Tepat! Cari huruf berikutnya.'
+            key.set_fill("#208C57")
+            self.status.value = "Tepat! Cari huruf berikutnya."
         else:
             self.wrong += 1
-            key.fill = (0.65, 0.2, 0.2, 1)
-            self.status.text = f'Belum tepat. Kesalahan {self.wrong}/6.'
-        key._redraw()
+            key.set_fill("#A63336")
+            self.status.value = f"Belum tepat. Kesalahan {self.wrong}/6."
         self.refresh()
+        if letter not in self.word and self.wrong:
+            self.gallows.animate_new_part()
         if all(letter in self.guessed for letter in self.word):
             self.finish(True)
         elif self.wrong >= 6:
@@ -159,13 +215,18 @@ class HangmanScreen(BgScreen):
             key.disabled = True
         if won:
             self.db.record_hangman_win()
-            self.stats = self.db.get_hangman_stats()
-            self._update_streak_label()
-            self.status.text = 'Kamu menang!'
-            info_popup('MENANG!', f'Kata yang benar: {self.word}', on_ok=self.new_game, btn='Kata baru')
+            self.status.value = "Kamu menang!"
+            title, button = "MENANG!", "Kata baru"
         else:
             self.db.record_hangman_loss()
-            self.stats = self.db.get_hangman_stats()
-            self._update_streak_label()
-            self.status.text = 'Kesempatan habis.'
-            info_popup('SELESAI', f'Kata yang benar: {self.word}', on_ok=self.new_game, btn='Coba lagi')
+            self.status.value = "Kesempatan habis."
+            title, button = "SELESAI", "Coba lagi"
+        self.stats = self.db.get_hangman_stats()
+        self._update_streak_label()
+        info_popup(
+            self.app_page,
+            title,
+            f"Kata yang benar: {self.word}",
+            on_ok=self.new_game,
+            btn=button,
+        )

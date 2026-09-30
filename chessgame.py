@@ -1,12 +1,8 @@
+import asyncio
+import base64
 import random
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.label import Label
-from kivy.uix.button import Button
-from kivy.uix.popup import Popup
-from kivy.uix.widget import Widget
-from kivy.clock import Clock
-from kivy.metrics import dp
-from kivy.graphics import Color, Line, Ellipse, Rectangle, Triangle, RoundedRectangle
+
+import flet as ft
 
 from common import BgScreen, TopBar, ModernButton, info_popup, DARKBTN, CYAN, MUTED
 
@@ -252,146 +248,148 @@ class Engine:
             return val, best
 
 
-def add_piece(inst, p, x, y, s):
-    """Draw a recognizable chess-piece silhouette without font glyphs."""
-    white = p.isupper()
-    fill = (0.96, 0.98, 1, 1) if white else (0.08, 0.1, 0.15, 1)
-    edge = (0.05, 0.08, 0.12, 1) if white else (0.85, 0.92, 1, 1)
-    cx, cy = x + s / 2, y + s / 2
-    base_y = y + s * 0.12
-    body_y = y + s * 0.28
-    piece = p.upper()
-    inst.add(Color(*edge))
-    inst.add(Ellipse(pos=(x + s * 0.16, base_y), size=(s * 0.68, s * 0.16)))
-    inst.add(RoundedRectangle(pos=(x + s * 0.24, base_y + s * 0.06),
-                              size=(s * 0.52, s * 0.1), radius=[s * 0.04]))
-    inst.add(Color(*fill))
-    inst.add(Ellipse(pos=(x + s * 0.22, y + s * 0.2), size=(s * 0.56, s * 0.15)))
-    if piece == 'P':
-        inst.add(Ellipse(pos=(cx - s * 0.15, y + s * 0.55), size=(s * 0.3, s * 0.28)))
-        inst.add(Triangle(points=[cx - s * 0.2, body_y, cx + s * 0.2, body_y,
-                                  cx, y + s * 0.6]))
-    elif piece == 'N':
-        inst.add(Rectangle(pos=(x + s * 0.32, body_y), size=(s * 0.32, s * 0.38)))
-        inst.add(Triangle(points=[x + s * 0.38, y + s * 0.55, x + s * 0.4, y + s * 0.86,
-                                  x + s * 0.7, y + s * 0.55]))
-        inst.add(Triangle(points=[x + s * 0.55, y + s * 0.55, x + s * 0.7, y + s * 0.55,
-                                  x + s * 0.73, y + s * 0.7]))
-        inst.add(Ellipse(pos=(x + s * 0.55, y + s * 0.65), size=(s * 0.07, s * 0.07)))
-    elif piece == 'R':
-        inst.add(Rectangle(pos=(x + s * 0.3, body_y), size=(s * 0.4, s * 0.4)))
-        for offset in (0.3, 0.43, 0.56):
-            inst.add(Rectangle(pos=(x + s * offset, y + s * 0.66), size=(s * 0.1, s * 0.18)))
-        inst.add(Rectangle(pos=(x + s * 0.26, y + s * 0.63), size=(s * 0.48, s * 0.08)))
-    elif piece == 'B':
-        inst.add(Triangle(points=[cx, y + s * 0.88, x + s * 0.32, body_y,
-                                  x + s * 0.68, body_y]))
-        inst.add(Ellipse(pos=(cx - s * 0.13, y + s * 0.72), size=(s * 0.26, s * 0.2)))
-        inst.add(Line(points=[cx - s * 0.04, y + s * 0.76, cx + s * 0.05, y + s * 0.86], width=dp(1.5)))
-    elif piece == 'Q':
-        inst.add(Ellipse(pos=(cx - s * 0.18, y + s * 0.68), size=(s * 0.36, s * 0.2)))
-        inst.add(Triangle(points=[x + s * 0.28, y + s * 0.71, x + s * 0.36, y + s * 0.9,
-                                  cx, y + s * 0.74]))
-        inst.add(Triangle(points=[cx, y + s * 0.74, x + s * 0.64, y + s * 0.9,
-                                  x + s * 0.72, y + s * 0.71]))
-    else:
-        inst.add(Rectangle(pos=(x + s * 0.43, y + s * 0.58), size=(s * 0.14, s * 0.27)))
-        inst.add(Rectangle(pos=(x + s * 0.32, y + s * 0.8), size=(s * 0.36, s * 0.1)))
-        inst.add(Rectangle(pos=(x + s * 0.45, y + s * 0.89), size=(s * 0.1, s * 0.08)))
+def _piece_image(piece):
+    white = piece.isupper()
+    fill = "#F4F7FA" if white else "#111722"
+    edge = "#101722" if white else "#E7EEF5"
+    shapes = {
+        "P": '<circle cx="50" cy="31" r="15"/><path d="M35 50 Q50 42 65 50 L74 79 H26 Z"/>',
+        "N": '<path d="M26 79 L31 49 Q39 39 37 25 L57 18 L53 34 Q70 38 76 57 L70 79 Z"/><circle cx="58" cy="39" r="2" fill="{edge}"/>',
+        "B": '<path d="M50 17 Q71 36 62 49 Q74 58 72 79 H28 Q26 58 38 49 Q29 36 50 17 Z"/><path d="M45 31 L56 42" fill="none" stroke="{edge}" stroke-width="4"/>',
+        "R": '<path d="M27 20 H39 V33 H45 V20 H56 V33 H62 V20 H74 V43 L68 49 V78 H32 V49 L27 43 Z"/>',
+        "Q": '<path d="M27 27 L41 42 L50 19 L59 42 L73 27 L68 53 H32 Z M34 59 H66 L72 79 H28 Z"/><circle cx="27" cy="23" r="5"/><circle cx="50" cy="15" r="5"/><circle cx="73" cy="23" r="5"/>',
+        "K": '<path d="M46 15 H54 V27 H66 V35 H54 V46 Q69 53 68 62 H32 Q31 53 46 46 V35 H34 V27 H46 Z M34 67 H66 L72 80 H28 Z"/>',
+    }
+    piece_shape = shapes[piece.upper()].format(edge=edge)
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+        f'<g fill="{fill}" stroke="{edge}" stroke-width="3" '
+        f'stroke-linejoin="round">{piece_shape}</g></svg>'
+    )
+    encoded = base64.b64encode(svg.encode("utf-8")).decode("ascii")
+    return f"data:image/svg+xml;base64,{encoded}"
 
 
-class ChessBoard(Widget):
-    def __init__(self, screen, **kw):
-        super().__init__(**kw)
+class ChessBoard(ft.GridView):
+    def __init__(self, screen):
         self.screen = screen
-        self._g = None
-        self.bind(pos=self._draw, size=self._draw)
-        self._draw()
+        super().__init__(
+            runs_count=8,
+            spacing=0,
+            run_spacing=0,
+            child_aspect_ratio=1,
+            controls=self._squares(),
+        )
 
-    def _draw(self, *a):
-        self.canvas.clear()
-        scr = self.screen
-        eng = scr.eng
-        s = min(self.width, self.height)
-        if s <= 0:
-            return
-        ox = self.x + (self.width - s) / 2
-        oy = self.y + (self.height - s) / 2
-        cs = s / 8
-        self._g = (ox, oy, cs)
-        targets = {(m[2], m[3]) for m in scr.targets}
-        with self.canvas:
-            for r in range(8):
-                for c in range(8):
-                    Color(*(0.2, 0.29, 0.36, 1) if (r + c) % 2 == 0 else (0.1, 0.16, 0.22, 1))
-                    Rectangle(pos=(ox + c * cs, oy + r * cs), size=(cs, cs))
-            if eng.last:
-                Color(0.35, 0.8, 0.35, 0.45)
-                for (r, c) in (eng.last[0:2], eng.last[2:4]):
-                    Rectangle(pos=(ox + c * cs, oy + r * cs), size=(cs, cs))
-            if scr.sel:
-                Color(1, 0.9, 0.2, 0.6)
-                Rectangle(pos=(ox + scr.sel[1] * cs, oy + scr.sel[0] * cs), size=(cs, cs))
-                Color(0.1, 0.1, 0.1, 0.5)
-                for (r, c) in targets:
-                    if eng.b[r][c] is None:
-                        Ellipse(pos=(ox + c * cs + cs * .42, oy + r * cs + cs * .42),
-                                size=(cs * .16, cs * .16))
-                    else:
-                        Line(circle=(ox + c * cs + cs / 2, oy + r * cs + cs / 2, cs * .44), width=dp(2))
-            for r in range(8):
-                for c in range(8):
-                    p = eng.b[r][c]
-                    if p:
-                        add_piece(self.canvas, p, ox + c * cs, oy + r * cs, cs)
+    def _squares(self):
+        screen = self.screen
+        legal_targets = {(move[2], move[3]) for move in screen.targets}
+        last_squares = set()
+        if screen.eng.last:
+            last_squares = {screen.eng.last[:2], screen.eng.last[2:]}
+        squares = []
+        for row in range(8):
+            for column in range(8):
+                piece = screen.eng.b[row][column]
+                selected = screen.sel == (row, column)
+                is_target = (row, column) in legal_targets
+                color = "#405D70" if (row + column) % 2 == 0 else "#192936"
+                if (row, column) in last_squares:
+                    color = "#587D4A"
+                if selected:
+                    color = "#B28B29"
+                content = None
+                if piece:
+                    content = ft.Image(
+                        src=_piece_image(piece),
+                        width=40,
+                        height=40,
+                        fit=ft.BoxFit.CONTAIN,
+                        anti_alias=True,
+                    )
+                elif is_target:
+                    content = ft.Container(
+                        width=12,
+                        height=12,
+                        bgcolor="#A9BEC8",
+                        border_radius=20,
+                    )
+                square = ft.Container(
+                    content=content,
+                    bgcolor=color,
+                    alignment=ft.Alignment(0, 0),
+                    padding=0,
+                    border=ft.Border.all(2, "#D4B45E") if is_target and piece else None,
+                    on_click=lambda _event, r=row, c=column: screen.tap(r, c),
+                    tooltip=f"{chr(97 + column)}{8 - row}",
+                )
+                squares.append(square)
+        return squares
 
-    def on_touch_down(self, t):
-        if not self.collide_point(*t.pos) or self._g is None or not self.screen.my_turn:
-            return False
-        ox, oy, cs = self._g
-        c = int((t.x - ox) // cs)
-        r = int((t.y - oy) // cs)
-        if 0 <= r < 8 and 0 <= c < 8:
-            self.screen.tap(r, c)
-        return True
+    def redraw(self):
+        self.controls = self._squares()
 
 
 class ChessScreen(BgScreen):
-    def __init__(self, sm, **kw):
-        super().__init__(**kw)
-        self.sm = sm
+    PLAYER_TURN = "player"
+    BOT_TURN = "bot"
+
+    def __init__(self, page, **kwargs):
+        self.app_page = page
         self.eng = Engine()
         self.sel = None
         self.targets = []
         self.my_turn = True
+        self.turn_state = self.PLAYER_TURN
+        self.bot_thinking = False
+        self.is_replaying = False
         self.over = False
         self.sulit = True
         self.gen = 0
-        self.replay_record = None
+        self.pending_turn = None
+        self.last_complete_turn = None
         self.player2_mode = None
 
-        root = BoxLayout(orientation='vertical', padding=[dp(12), dp(8)], spacing=dp(8))
-        root.add_widget(TopBar(sm, 'CATUR', on_refresh=self.reset_game))
-
-        hdr = BoxLayout(size_hint_y=None, height=dp(48), padding=[dp(8), dp(4)], spacing=dp(8))
-        self.lbl_k = Label(text='KAMU 16', bold=True, color=CYAN, font_size=dp(16))
-        self.lbl_v = Label(text='VS', bold=True, color=MUTED)
-        self.lbl_b = Label(text='BOT 16', bold=True, color=(1, 0.42, 0.38, 1), font_size=dp(16))
-        for w in (self.lbl_k, self.lbl_v, self.lbl_b):
-            hdr.add_widget(w)
-        root.add_widget(hdr)
-
+        self.lbl_k = ft.Text("KAMU 16", weight=ft.FontWeight.BOLD, color=CYAN)
+        self.lbl_v = ft.Text("VS", weight=ft.FontWeight.BOLD, color=MUTED)
+        self.lbl_b = ft.Text("BOT 16", weight=ft.FontWeight.BOLD, color="#FF6B63")
+        self.status = ft.Text("Pilih mode permainan", color=MUTED, weight=ft.FontWeight.BOLD)
         self.board = ChessBoard(self)
-        root.add_widget(self.board)
-        self.status = Label(text='Pilih mode permainan', color=MUTED,
-                    size_hint_y=None, height=dp(34), bold=True)
-        root.add_widget(self.status)
-        self.replay_btn = ModernButton(text='Ulangi Gerakan', size_hint_y=None, height=dp(46),
-                 fill=(0.6, 0.16, 0.18, 1),
-                     color=(1, 1, 1, 1), bold=True)
-        self.replay_btn.bind(on_press=lambda *a: self.replay_move())
-        root.add_widget(self.replay_btn)
-        self.add_widget(root)
+        board_size = min(max((getattr(page, "width", None) or 430) - 32, 280), 520)
+        self.replay_btn = ModernButton(
+            text="Ulangi Gerakan",
+            fill="#992E35",
+            color="#FFFFFF",
+            bold=True,
+            height=46,
+            disabled=True,
+            on_click=lambda _event: self.replay_move(),
+        )
+        content = ft.Column(
+            controls=[
+                TopBar(page, "CATUR", on_refresh=self.reset_game),
+                ft.Row(
+                    controls=[self.lbl_k, self.lbl_v, self.lbl_b],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    height=42,
+                ),
+                ft.Container(
+                    content=self.board,
+                    width=board_size,
+                    height=board_size,
+                    border_radius=6,
+                    clip_behavior=ft.ClipBehavior.HARD_EDGE,
+                ),
+                self.status,
+                self.replay_btn,
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=8,
+            scroll=ft.ScrollMode.AUTO,
+        )
+        super().__init__(bg="#111E2D", content=content, **kwargs)
+        if self.app_page:
+            self._show_mode_prompt()
 
     def on_pre_enter(self):
         self.reset_session()
@@ -407,48 +405,47 @@ class ChessScreen(BgScreen):
         self.sel = None
         self.targets = []
         self.my_turn = True
+        self.turn_state = self.PLAYER_TURN
+        self.bot_thinking = False
+        self.is_replaying = False
         self.over = False
-        self.replay_record = None
+        self.pending_turn = None
+        self.last_complete_turn = None
         self.player2_mode = None
-        self.status.text = 'Pilih mode permainan'
+        self.status.value = "Pilih mode permainan"
         self.update_labels()
         self.update_replay_button()
-        self.board._draw()
+        self.board.redraw()
 
     def _show_mode_prompt(self):
-        box = BoxLayout(orientation='vertical', padding=dp(18), spacing=dp(10), size_hint=(None, None), size=(dp(260), dp(180)))
-        with box.canvas.before:
-            Color(0.06, 0.09, 0.15, 1)
-            box._bg = RoundedRectangle(pos=box.pos, size=box.size, radius=[dp(16)])
-            Color(0.25, 0.82, 0.9, 0.35)
-            box._border = Line(rounded_rectangle=(box.x, box.y, box.width, box.height, dp(16)), width=dp(1.2))
-        box.bind(pos=lambda *_: self._sync_mode_popup_bg(box), size=lambda *_: self._sync_mode_popup_bg(box))
-        box.add_widget(Label(text='Pilih Player 2', color=(1, 1, 1, 1), bold=True, font_size=dp(18),
-                            size_hint_y=None, height=dp(28)))
-        row = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(10))
-        bot_btn = ModernButton(text='BOT', fill=(0.12, 0.22, 0.35, 1), color=(1, 1, 1, 1), bold=True)
-        bot_btn.bind(on_press=lambda *a: self._set_mode(False, popup))
-        row.add_widget(bot_btn)
-        local_btn = ModernButton(text='PLAYER 2', fill=(0.20, 0.34, 0.42, 1), color=(1, 1, 1, 1), bold=True)
-        local_btn.bind(on_press=lambda *a: self._set_mode(True, popup))
-        row.add_widget(local_btn)
-        box.add_widget(row)
-        popup = Popup(title='CHESS', content=box, size_hint=(None, None), size=(dp(260), dp(180)),
-                      background_color=(0, 0, 0, 0), separator_height=0, title_color=(1, 1, 1, 1),
-                      title_size=dp(16))
-        self._mode_popup = popup
-        popup.open()
+        dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Pilih Player 2", color="#FFFFFF",
+                          weight=ft.FontWeight.BOLD),
+            content=ft.Text("Main melawan bot atau bergantian di perangkat ini?",
+                            color=MUTED),
+            bgcolor="#111A29",
+            actions=[
+                ft.Button(
+                    content="BOT",
+                    on_click=lambda _event: self._set_mode(False),
+                    bgcolor="#203859",
+                    color="#FFFFFF",
+                ),
+                ft.Button(
+                    content="PLAYER 2",
+                    on_click=lambda _event: self._set_mode(True),
+                    bgcolor="#315260",
+                    color="#FFFFFF",
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        self.app_page.show_dialog(dialog)
 
-    def _sync_mode_popup_bg(self, box):
-        if hasattr(box, '_bg'):
-            box._bg.pos = box.pos
-            box._bg.size = box.size
-        if hasattr(box, '_border'):
-            box._border.rounded_rectangle = (box.x, box.y, box.width, box.height, dp(16))
-
-    def _set_mode(self, is_local, popup):
+    def _set_mode(self, is_local):
+        self.app_page.pop_dialog()
         self.player2_mode = is_local
-        popup.dismiss()
         self.new_game()
 
     def new_game(self):
@@ -457,156 +454,252 @@ class ChessScreen(BgScreen):
         self.sel = None
         self.targets = []
         self.my_turn = True
+        self.turn_state = self.PLAYER_TURN
+        self.bot_thinking = False
+        self.is_replaying = False
         self.over = False
-        self.replay_record = None
-        self.status.text = 'Giliranmu (putih)' if not self.player2_mode else 'Giliran putih'
+        self.pending_turn = None
+        self.last_complete_turn = None
+        self.status.value = "Giliranmu (putih)" if not self.player2_mode else "Giliran putih"
         self.update_labels()
         self.update_replay_button()
-        self.board._draw()
+        self.board.redraw()
 
-    def reset_game(self, *args):
+    def reset_game(self, *_args):
         """Reset the board and invalidate any bot move already scheduled."""
         self.new_game()
 
     def update_labels(self):
-        w = sum(1 for row in self.eng.b for p in row if p and p.isupper())
-        b_ = sum(1 for row in self.eng.b for p in row if p and not p.isupper())
-        self.lbl_k.text = f'KAMU {w}'
-        self.lbl_b.text = f'BOT {b_}' if not self.player2_mode else f'P2 {b_}'
+        white_count = sum(1 for row in self.eng.b for piece in row if piece and piece.isupper())
+        black_count = sum(1 for row in self.eng.b for piece in row if piece and not piece.isupper())
+        self.lbl_k.value = f"KAMU {white_count}"
+        self.lbl_b.value = f"BOT {black_count}" if not self.player2_mode else f"P2 {black_count}"
 
-    def tap(self, r, c):
-        if self.over or not self.my_turn:
+    def tap(self, row, column):
+        if (
+            self.over
+            or not self.my_turn
+            or (not self.player2_mode and self.turn_state != self.PLAYER_TURN)
+        ):
             return
-        if (r, c) in {(m[2], m[3]) for m in self.targets}:
-            self.do_move((self.sel[0], self.sel[1], r, c))
+        if (row, column) in {(move[2], move[3]) for move in self.targets}:
+            self.do_move((self.sel[0], self.sel[1], row, column))
             return
-        p = self.eng.b[r][c]
+        piece = self.eng.b[row][column]
         turn = self.eng.turn
         if self.player2_mode:
-            if p and ((turn == 'w' and p.isupper()) or (turn == 'b' and p.islower())):
-                self.sel = (r, c)
-                self.targets = [m for m in self.eng.legal(turn) if (m[0], m[1]) == (r, c)]
-                self.board._draw()
+            if piece and ((turn == "w" and piece.isupper()) or (turn == "b" and piece.islower())):
+                self.sel = (row, column)
+                self.targets = [move for move in self.eng.legal(turn)
+                                if (move[0], move[1]) == (row, column)]
             else:
                 self.sel = None
                 self.targets = []
-                self.board._draw()
+            self.board.redraw()
             return
-        if p and p.isupper():
-            self.sel = (r, c)
-            self.targets = [m for m in self.eng.legal('w') if (m[0], m[1]) == (r, c)]
-            self.board._draw()
+        if piece and piece.isupper():
+            self.sel = (row, column)
+            self.targets = [move for move in self.eng.legal("w")
+                            if (move[0], move[1]) == (row, column)]
         else:
             self.sel = None
             self.targets = []
-            self.board._draw()
+        self.board.redraw()
 
-    def do_move(self, m):
-        before = self._snapshot()
-        turn = self.eng.turn
-        self.eng.make(m)
-        self.eng.last = m
-        self.replay_record = (before, self._snapshot(), m, turn)
+    def do_move(self, move):
+        turn = self._apply_move(move)
         self.sel = None
         self.targets = []
         self.update_labels()
-        self.update_replay_button()
-        self.board._draw()
+        self.board.redraw()
         self.after_move(turn)
+
+    def _apply_move(self, move):
+        before = self._snapshot()
+        moved = self.eng.turn
+        self.eng.make(move)
+        self.eng.last = move
+        if moved == "w":
+            self.pending_turn = {"before": before, "player_move": move}
+            self.last_complete_turn = None
+        elif self.pending_turn is not None:
+            self.last_complete_turn = {
+                **self.pending_turn,
+                "bot_move": move,
+                "after": self._snapshot(),
+            }
+            self.pending_turn = None
+        self.update_replay_button()
+        return moved
 
     def _snapshot(self):
         return ([row[:] for row in self.eng.b], self.eng.turn,
-                self.eng.ep, set(self.eng.rights))
+                self.eng.ep, set(self.eng.rights), self.eng.last)
 
     def _restore(self, snapshot):
-        board, turn, ep, rights = snapshot
+        board, turn, ep, rights, last = snapshot
         self.eng.b = [row[:] for row in board]
         self.eng.turn = turn
         self.eng.ep = ep
         self.eng.rights = set(rights)
+        self.eng.last = last
 
     def _same_state(self, left, right):
-        return (left[0] == right[0] and left[1:] == right[1:])
+        return left[0] == right[0] and left[1:] == right[1:]
 
     def update_replay_button(self):
-        self.replay_btn.disabled = self.over or self.replay_record is None
+        self.replay_btn.disabled = (
+            self.over
+            or self.is_replaying
+            or self.bot_thinking
+            or self.pending_turn is not None
+            or self.last_complete_turn is None
+        )
 
-    def replay_move(self):
-        record = self.replay_record
-        if self.over or record is None:
+    async def replay_move(self):
+        record = self.last_complete_turn
+        if (
+            self.over
+            or self.is_replaying
+            or self.bot_thinking
+            or self.pending_turn is not None
+            or record is None
+        ):
             self.update_replay_button()
             return
-        before, after, move, moved = record
-        cur = self._snapshot()
-        if self._same_state(cur, after):
-            self._restore(before)
-            self.sel = None
-            self.targets = []
-            self.update_labels()
-            self.board._draw()
-            self.status.text = 'Gerakan terakhir dibatalkan'
-            self.replay_record = (before, after, move, moved)
+        current = self._snapshot()
+        if not self._same_state(current, record["after"]):
             self.update_replay_button()
             return
-        if self._same_state(cur, before):
-            self.eng.make(move)
-            self.eng.last = move
-            self.sel = None
-            self.targets = []
-            self.update_labels()
-            self.board._draw()
-            self.status.text = 'Gerakan terakhir diputar ulang'
-            self.replay_record = (before, after, move, moved)
-            self.update_replay_button()
-            return
+
+        self.is_replaying = True
+        self.my_turn = False
+        self.status.value = "Mengulang giliran..."
         self.update_replay_button()
+        try:
+            self._restore(record["before"])
+            self.sel = None
+            self.targets = []
+            self.update_labels()
+            self.board.redraw()
+            if self.app_page:
+                self.app_page.update()
+            await asyncio.sleep(0.18)
+
+            if record["player_move"] not in self.eng.legal("w"):
+                self._restore(current)
+                return
+            self.eng.make(record["player_move"])
+            self.eng.last = record["player_move"]
+            self.turn_state = self.BOT_TURN
+            self.update_labels()
+            self.board.redraw()
+            self.status.value = "Langkah player diputar ulang"
+            if self.app_page:
+                self.app_page.update()
+            await asyncio.sleep(0.18)
+
+            if record["bot_move"] not in self.eng.legal("b"):
+                self._restore(current)
+                return
+            self.eng.make(record["bot_move"])
+            self.eng.last = record["bot_move"]
+        finally:
+            self.is_replaying = False
+        self.pending_turn = None
+        self.my_turn = True
+        self.turn_state = self.PLAYER_TURN
+        self.bot_thinking = False
+        self.over = False
+        self.sel = None
+        self.targets = []
+        self.update_labels()
+        self.board.redraw()
+        self.status.value = "Gerakan player dan bot diputar ulang"
+        self.after_move("b")
+        if self.app_page:
+            self.app_page.update()
 
     def after_move(self, moved):
-        eng = self.eng
-        nxt = 'b' if moved == 'w' else 'w'
-        moves = eng.legal(nxt)
-        chk = eng.in_check(nxt)
+        if self.is_replaying:
+            return
+        next_turn = "b" if moved == "w" else "w"
+        moves = self.eng.legal(next_turn)
+        check = self.eng.in_check(next_turn)
         if not moves:
             self.over = True
+            self.bot_thinking = False
             self.update_replay_button()
-            if chk:
-                self.status.text = 'Skakmat!'
-                msg = 'Skakmat! ' + ('Kamu menang!' if moved == 'w' else 'Bot menang.')
-                info_popup('PERMAINAN SELESAI', msg, on_ok=self.new_game, btn='Main lagi')
+            if check:
+                self.status.value = "Skakmat!"
+                message = "Skakmat! " + ("Kamu menang!" if moved == "w" else "Bot menang.")
+                info_popup(self.app_page, "PERMAINAN SELESAI", message,
+                           on_ok=self.new_game, btn="Main lagi")
             else:
-                self.status.text = 'Remis'
-                info_popup('REMIS', 'Remis (stalemate) — tidak ada langkah sah.',
-                           on_ok=self.new_game, btn='Main lagi')
+                self.status.value = "Remis"
+                info_popup(self.app_page, "REMIS", "Remis (stalemate) — tidak ada langkah sah.",
+                           on_ok=self.new_game, btn="Main lagi")
             return
         if self.player2_mode:
+            self.turn_state = self.PLAYER_TURN
+            self.bot_thinking = False
             self.my_turn = True
-            side = 'Putih' if eng.turn == 'w' else 'Hitam'
-            self.status.text = ('SKAK! ' if chk else '') + f'Giliran {side}'
+            side = "Putih" if self.eng.turn == "w" else "Hitam"
+            self.status.value = ("SKAK! " if check else "") + f"Giliran {side}"
             return
-        if moved == 'w':
+        if moved == "w":
+            if (
+                self.turn_state == self.BOT_TURN
+                or self.bot_thinking
+                or self.pending_turn is None
+                or self.eng.turn != "b"
+            ):
+                return
+            self.turn_state = self.BOT_TURN
+            self.bot_thinking = True
             self.my_turn = False
-            self.status.text = ('SKAK! ' if chk else '') + 'Bot berpikir...'
-            Clock.schedule_once(lambda dt, g=self.gen: self.bot_move(g), 0.7)
+            self.status.value = ("SKAK! " if check else "") + "Bot berpikir..."
+            if self.app_page:
+                self.app_page.run_task(self._delayed_bot_move, self.gen)
         else:
+            self.turn_state = self.PLAYER_TURN
+            self.bot_thinking = False
             self.my_turn = True
-            self.status.text = ('SKAK! ' if chk else '') + 'Giliranmu'
+            self.status.value = ("SKAK! " if check else "") + "Giliranmu"
+            self.update_replay_button()
 
-    def bot_move(self, g):
-        if self.over or g != self.gen or self.player2_mode:
+    async def _delayed_bot_move(self, generation):
+        await asyncio.sleep(0.7)
+        if (
+            self.over
+            or generation != self.gen
+            or self.player2_mode
+            or self.turn_state != self.BOT_TURN
+            or not self.bot_thinking
+        ):
             return
-        eng = self.eng
-        moves = eng.legal('b')
+        self.bot_move(generation)
+        if self.app_page:
+            self.app_page.update()
+
+    def bot_move(self, generation):
+        if (
+            self.over
+            or generation != self.gen
+            or self.player2_mode
+            or self.eng.turn != "b"
+            or self.turn_state != self.BOT_TURN
+            or not self.bot_thinking
+        ):
+            return
+        moves = self.eng.legal("b")
         if not moves:
             return
-        _, m = eng.search(3, -1e9, 1e9, 'b')
-        if m is None:
-            m = random.choice(moves)
-        before = self._snapshot()
-        eng.make(m)
-        eng.last = m
-        self.replay_record = (before, self._snapshot(), m, 'b')
+        _, move = self.eng.search(3, -1e9, 1e9, "b")
+        if move is None:
+            move = random.choice(moves)
+        self._apply_move(move)
         self.update_labels()
-        self.update_replay_button()
-        self.board._draw()
-        self.after_move('b')
+        self.board.redraw()
+        self.after_move("b")
 
