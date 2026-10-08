@@ -1,8 +1,16 @@
+# ==================================================
+# IMPORT LIBRARY
+# Bagian ini menyediakan akses file, SQLite, dan waktu pencatatan.
+# ==================================================
 import os
 import sqlite3
 from datetime import datetime
 
 
+# ==================================================
+# PENGELOLA DATABASE
+# Class ini membuat koneksi dan menyimpan kemajuan serta statistik game.
+# ==================================================
 class DatabaseManager:
     """DatabaseManager for the SQLite game database."""
 
@@ -19,6 +27,7 @@ class DatabaseManager:
         return conn
 
     def initialize_database(self):
+        # Buat tabel yang diperlukan jika database belum memilikinya.
         conn = self._connect()
         try:
             conn.execute('''
@@ -50,6 +59,7 @@ class DatabaseManager:
             conn.close()
 
     def get_maze_progress(self):
+        # Ambil level labirin tersimpan atau nilai awal jika belum ada.
         conn = self._connect()
         try:
             row = conn.execute('''
@@ -65,6 +75,7 @@ class DatabaseManager:
             conn.close()
 
     def save_maze_progress(self, current_level, highest_level=None):
+        # Simpan level aktif dan rekor tertinggi ke database.
         if highest_level is None:
             highest_level = current_level
         highest_level = max(1, int(highest_level))
@@ -89,6 +100,7 @@ class DatabaseManager:
             conn.close()
 
     def get_hangman_stats(self):
+        # Ambil statistik rentetan kemenangan Hangman.
         conn = self._connect()
         try:
             row = conn.execute('''
@@ -104,6 +116,7 @@ class DatabaseManager:
             conn.close()
 
     def record_hangman_win(self):
+        # Tambah rentetan menang dan perbarui rekor terbaik.
         conn = self._connect()
         try:
             row = conn.execute('SELECT id, current_streak, best_streak FROM hangman_stats ORDER BY id ASC LIMIT 1').fetchone()
@@ -128,6 +141,7 @@ class DatabaseManager:
             conn.close()
 
     def record_hangman_loss(self):
+        # Atur ulang rentetan menang ketika permainan berakhir kalah.
         conn = self._connect()
         try:
             row = conn.execute('SELECT id, current_streak, best_streak FROM hangman_stats ORDER BY id ASC LIMIT 1').fetchone()
@@ -148,6 +162,7 @@ class DatabaseManager:
             conn.close()
 
     def get_minesweeper_stats(self):
+        # Ambil statistik rentetan kemenangan Minesweeper.
         conn = self._connect()
         try:
             row = conn.execute('''
@@ -163,6 +178,7 @@ class DatabaseManager:
             conn.close()
 
     def record_minesweeper_win(self):
+        # Tambah rentetan menang Minesweeper dan simpan rekor terbaik.
         conn = self._connect()
         try:
             row = conn.execute('SELECT id, current_streak, best_streak FROM minesweeper_stats ORDER BY id ASC LIMIT 1').fetchone()
@@ -187,6 +203,7 @@ class DatabaseManager:
             conn.close()
 
     def record_minesweeper_loss(self):
+        # Atur ulang rentetan menang Minesweeper setelah kalah.
         conn = self._connect()
         try:
             row = conn.execute('SELECT id, current_streak, best_streak FROM minesweeper_stats ORDER BY id ASC LIMIT 1').fetchone()
@@ -207,7 +224,10 @@ class DatabaseManager:
             conn.close()
 
 
-# Top-level convenience inference functions requested by the project.
+# ==================================================
+# FUNGSI DATABASE PRAKTIS
+# Fungsi berikut memudahkan modul lain memakai database tanpa membuat query.
+# ==================================================
 def initialize_database(db_path=None):
     return DatabaseManager(db_path=db_path).initialize_database()
 

@@ -1,3 +1,7 @@
+# ==================================================
+# IMPORT LIBRARY DAN KUMPULAN KATA
+# Bagian ini menyiapkan gambar, animasi, dan kata untuk ditebak.
+# ==================================================
 import asyncio
 import base64
 import random
@@ -20,10 +24,15 @@ WORDS = (
 LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 
+# ==================================================
+# GAMBAR TIANG DAN ANIMASINYA
+# Class ini menggambar bagian tubuh sesuai jumlah tebakan yang salah.
+# ==================================================
 class Gallows(ft.Image):
     def __init__(self, game, **kwargs):
         self.game = game
         self.reveal = 0
+        self.reveal_generation = 0
         super().__init__(
             src="",
             width=280,
@@ -35,22 +44,31 @@ class Gallows(ft.Image):
         self.draw()
 
     def animate_new_part(self):
+        self.reveal_generation += 1
+        generation = self.reveal_generation
         target = self.game.wrong
         self.reveal = max(0, target - 1)
         self.draw()
         if self.game.app_page:
-            self.game.app_page.run_task(self._reveal_parts, target)
+            self.game.app_page.run_task(self._reveal_parts, target, generation)
         else:
             self.reveal = target
             self.draw()
 
-    async def _reveal_parts(self, target):
-        while self.reveal < target:
+    async def _reveal_parts(self, target, generation):
+        while self.reveal < target and generation == self.reveal_generation:
             await asyncio.sleep(0.04)
+            if generation != self.reveal_generation:
+                return
             self.reveal += 1
             self.draw()
             if self.page:
                 self.update()
+
+    def reset(self):
+        self.reveal_generation += 1
+        self.reveal = 0
+        self.draw()
 
     def draw(self, *_args):
         parts = [
@@ -73,6 +91,7 @@ class Gallows(ft.Image):
 
 
 class HangmanScreen(BgScreen):
+    # Layar ini mengatur kata rahasia, tombol huruf, dan statistik pemain.
     def __init__(self, page, **kwargs):
         self.app_page = page
         self.db = DatabaseManager()
@@ -93,6 +112,12 @@ class HangmanScreen(BgScreen):
             text_align=ft.TextAlign.CENTER,
         )
         self.gallows = Gallows(self)
+        self.gallows_slot = ft.Container(
+            content=self.gallows,
+            expand=True,
+            alignment=ft.Alignment(0, 0),
+            on_size_change=self._fit_gallows,
+        )
         self.status = ft.Text(
             "Pilih sebuah huruf",
             color="#FFD16B",
@@ -101,7 +126,7 @@ class HangmanScreen(BgScreen):
         self.keys = {}
         key_controls = []
         viewport_width = getattr(page, "width", None) or 414
-        key_width = min(54, max(42, (viewport_width - 54) / 7))
+        key_width = min(56, max(44, (viewport_width - 44) / 7))
         for letter in LETTERS:
             key = ModernButton(
                 text=letter,
@@ -110,6 +135,7 @@ class HangmanScreen(BgScreen):
                 bold=True,
                 font_size=17,
                 height=44,
+                button_padding=4,
                 on_click=lambda _event, value=letter: self.guess(value),
             )
             self.keys[letter] = key
@@ -117,10 +143,10 @@ class HangmanScreen(BgScreen):
         self.keyboard = ft.GridView(
             controls=key_controls,
             runs_count=7,
-            spacing=5,
-            run_spacing=5,
+            spacing=4,
+            run_spacing=4,
             child_aspect_ratio=key_width / 44,
-            height=191,
+            height=188,
             on_size_change=self._fit_keyboard,
         )
 
@@ -130,25 +156,38 @@ class HangmanScreen(BgScreen):
                 self.progress,
                 self.hint,
                 self.streak_label,
-                self.gallows,
+                self.gallows_slot,
                 self.status,
                 self.keyboard,
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=7,
-            scroll=ft.ScrollMode.AUTO,
+            spacing=4,
+            expand=True,
         )
         super().__init__(bg="#121F38", content=content, padding=12, **kwargs)
         self._update_streak_label()
         self.new_game()
 
     def _fit_keyboard(self, event):
-        key_width = min(54, max(42, (event.width - 30) / 7))
+        key_width = min(56, max(44, (event.width - 24) / 7))
         aspect_ratio = key_width / 44
         if abs(self.keyboard.child_aspect_ratio - aspect_ratio) > 0.01:
             self.keyboard.child_aspect_ratio = aspect_ratio
             if self.keyboard.page:
                 self.keyboard.update()
+
+    def _fit_gallows(self, event):
+        width = min(event.width, event.height * 280 / 205, 380)
+        if width <= 0:
+            return
+        self.gallows.width = width
+        self.gallows.height = width * 205 / 280
+        try:
+            gallows_page = self.gallows.page
+        except RuntimeError:
+            gallows_page = None
+        if gallows_page:
+            self.gallows.update()
 
     def on_enter(self):
         self.stats = self.db.get_hangman_stats()
@@ -161,7 +200,16 @@ class HangmanScreen(BgScreen):
             f"BEST: {self.stats.get('best_streak', 0)}"
         )
 
+    def _update_ui(self):
+        try:
+            screen_page = self.page
+        except RuntimeError:
+            screen_page = None
+        if screen_page:
+            screen_page.update()
+
     def new_game(self, *_args):
+        # Pilih kata baru dan pulihkan semua tombol serta hitungan kesalahan.
         available = [word for word in WORDS if word not in self.used_words]
         if not available:
             self.used_words.clear()
@@ -174,13 +222,13 @@ class HangmanScreen(BgScreen):
         self.guessed.update(self.auto_disabled)
         self.wrong = 0
         self.finished = False
-        self.gallows.reveal = 0
-        self.gallows.draw()
+        self.gallows.reset()
         for letter, key in self.keys.items():
             key.disabled = letter in self.auto_disabled
             key.set_fill("#1F2633" if key.disabled else DARKBTN)
         self.status.value = "Pilih sebuah huruf"
         self.refresh()
+        self._update_ui()
 
     def refresh(self):
         self.progress.value = " ".join(
@@ -189,6 +237,7 @@ class HangmanScreen(BgScreen):
         self.gallows.draw()
 
     def guess(self, letter):
+        # Periksa huruf pilihan, perbarui kemajuan, lalu tentukan hasil game.
         if self.finished or letter in self.guessed:
             return
         self.guessed.add(letter)
@@ -210,6 +259,7 @@ class HangmanScreen(BgScreen):
             self.finish(False)
 
     def finish(self, won):
+        # Kunci tombol, simpan statistik, dan beri tahu player hasil permainan.
         self.finished = True
         for key in self.keys.values():
             key.disabled = True

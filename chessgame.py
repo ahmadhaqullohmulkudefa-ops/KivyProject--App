@@ -1,10 +1,14 @@
+# ==================================================
+# IMPORT LIBRARY DAN ATURAN CATUR
+# Bagian ini menyiapkan alat bantu serta nilai dasar untuk AI.
+# ==================================================
 import asyncio
 import base64
 import random
 
 import flet as ft
 
-from common import BgScreen, TopBar, ModernButton, info_popup, DARKBTN, CYAN, MUTED
+from common import BgScreen, TopBar, info_popup, DARKBTN, CYAN, MUTED
 
 DIRS_B = [(1, 1), (1, -1), (-1, 1), (-1, -1)]
 DIRS_R = [(1, 0), (-1, 0), (0, 1), (0, -1)]
@@ -16,6 +20,10 @@ CENTER = [[0, 1, 2, 3, 3, 2, 1, 0], [1, 2, 3, 4, 4, 3, 2, 1],
           [1, 2, 3, 4, 4, 3, 2, 1], [0, 1, 2, 3, 3, 2, 1, 0]]
 
 
+# ==================================================
+# MESIN PERMAINAN CATUR
+# Fungsi dan class berikut memeriksa langkah serta menjalankan aturan catur.
+# ==================================================
 def inb(r, c):
     return 0 <= r < 8 and 0 <= c < 8
 
@@ -32,8 +40,8 @@ class Engine:
                  [[None] * 8 for _ in range(4)] + \
                  [list('PPPPPPPP'), list('RNBQKBNR')]
         self.turn = 'w'
-        self.ep = None            # target en passant
-        self.rights = set('KQkq')  # hak rokade
+        self.ep = None            # Petak sasaran untuk langkah en passant.
+        self.rights = set('KQkq')  # Hak rokade yang masih tersedia.
         self.last = None
 
     def own(self, p, color):
@@ -69,6 +77,7 @@ class Engine:
         return False
 
     def pseudo(self, color):
+        # Kumpulkan langkah calon berdasarkan gerakan tiap jenis bidak.
         b, mv = self.b, []
         for r in range(8):
             for c in range(8):
@@ -131,6 +140,7 @@ class Engine:
         return mv
 
     def make(self, m):
+        # Terapkan satu langkah, termasuk rokade, en passant, dan promosi.
         r1, c1, r2, c2 = m
         b = self.b
         piece = b[r1][c1]; cap = b[r2][c2]; flags = ''
@@ -192,6 +202,7 @@ class Engine:
         return kp is not None and self.attacked(kp[0], kp[1], 'b' if color == 'w' else 'w')
 
     def legal(self, color=None):
+        # Buang langkah yang membuat raja sendiri berada dalam skak.
         color = color or self.turn
         out = []
         for m in self.pseudo(color):
@@ -213,6 +224,7 @@ class Engine:
         return s
 
     def search(self, depth, alpha, beta, color):
+        # Cari langkah terbaik dengan minimax dan pemangkasan alpha-beta.
         moves = self.legal(color)
         if not moves:
             if self.in_check(color):
@@ -248,6 +260,10 @@ class Engine:
             return val, best
 
 
+# ==================================================
+# PEMBUATAN PAPAN DAN BIDAK
+# Bagian ini menggambar bidak dan merespons pilihan kotak di papan.
+# ==================================================
 def _piece_image(piece):
     white = piece.isupper()
     fill = "#F4F7FA" if white else "#111722"
@@ -279,6 +295,7 @@ class ChessBoard(ft.GridView):
             run_spacing=0,
             child_aspect_ratio=1,
             controls=self._squares(),
+            expand=True,
         )
 
     def _squares(self):
@@ -302,8 +319,8 @@ class ChessBoard(ft.GridView):
                 if piece:
                     content = ft.Image(
                         src=_piece_image(piece),
-                        width=40,
-                        height=40,
+                        width=screen.piece_size,
+                        height=screen.piece_size,
                         fit=ft.BoxFit.CONTAIN,
                         anti_alias=True,
                     )
@@ -331,6 +348,7 @@ class ChessBoard(ft.GridView):
 
 
 class ChessScreen(BgScreen):
+    # Layar ini mengatur giliran player, status permainan, dan giliran bot.
     PLAYER_TURN = "player"
     BOT_TURN = "bot"
 
@@ -342,28 +360,32 @@ class ChessScreen(BgScreen):
         self.my_turn = True
         self.turn_state = self.PLAYER_TURN
         self.bot_thinking = False
-        self.is_replaying = False
         self.over = False
         self.sulit = True
         self.gen = 0
-        self.pending_turn = None
-        self.last_complete_turn = None
         self.player2_mode = None
+        viewport_width = getattr(page, "width", None) or 430
+        viewport_height = getattr(page, "height", None) or 768
+        board_size = min(520, max(0, viewport_width - 24), max(0, viewport_height - 220))
+        self.piece_size = 40
 
         self.lbl_k = ft.Text("KAMU 16", weight=ft.FontWeight.BOLD, color=CYAN)
         self.lbl_v = ft.Text("VS", weight=ft.FontWeight.BOLD, color=MUTED)
         self.lbl_b = ft.Text("BOT 16", weight=ft.FontWeight.BOLD, color="#FF6B63")
         self.status = ft.Text("Pilih mode permainan", color=MUTED, weight=ft.FontWeight.BOLD)
         self.board = ChessBoard(self)
-        board_size = min(max((getattr(page, "width", None) or 430) - 32, 280), 520)
-        self.replay_btn = ModernButton(
-            text="Ulangi Gerakan",
-            fill="#992E35",
-            color="#FFFFFF",
-            bold=True,
-            height=46,
-            disabled=True,
-            on_click=lambda _event: self.replay_move(),
+        self.board_frame = ft.Container(
+            content=self.board,
+            width=board_size,
+            height=board_size,
+            border_radius=6,
+            clip_behavior=ft.ClipBehavior.HARD_EDGE,
+        )
+        self.board_slot = ft.Container(
+            content=self.board_frame,
+            expand=True,
+            alignment=ft.Alignment(0, 0),
+            on_size_change=self._fit_board,
         )
         content = ft.Column(
             controls=[
@@ -373,23 +395,33 @@ class ChessScreen(BgScreen):
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     height=42,
                 ),
-                ft.Container(
-                    content=self.board,
-                    width=board_size,
-                    height=board_size,
-                    border_radius=6,
-                    clip_behavior=ft.ClipBehavior.HARD_EDGE,
-                ),
+                self.board_slot,
                 self.status,
-                self.replay_btn,
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=8,
-            scroll=ft.ScrollMode.AUTO,
+            spacing=6,
+            expand=True,
         )
-        super().__init__(bg="#111E2D", content=content, **kwargs)
+        super().__init__(bg="#111E2D", content=content, padding=12, **kwargs)
         if self.app_page:
             self._show_mode_prompt()
+
+    def _fit_board(self, event):
+        board_size = min(event.width, event.height, 520)
+        if board_size <= 0:
+            return
+        if self.board_frame.width != board_size or self.board_frame.height != board_size:
+            self.board_size = board_size
+            self.piece_size = max(20, min(64, board_size / 8 * 0.88))
+            self.board_frame.width = board_size
+            self.board_frame.height = board_size
+            self.board.redraw()
+            try:
+                board_page = self.board_frame.page
+            except RuntimeError:
+                board_page = None
+            if board_page:
+                self.board_frame.update()
 
     def on_pre_enter(self):
         self.reset_session()
@@ -399,6 +431,7 @@ class ChessScreen(BgScreen):
         self.reset_session()
 
     def reset_session(self):
+        # Hapus sesi lama agar tugas bot sebelumnya tidak mengubah sesi baru.
         """Clear the active mode and board before the next Chess session."""
         self.gen += 1
         self.eng.reset()
@@ -407,14 +440,10 @@ class ChessScreen(BgScreen):
         self.my_turn = True
         self.turn_state = self.PLAYER_TURN
         self.bot_thinking = False
-        self.is_replaying = False
         self.over = False
-        self.pending_turn = None
-        self.last_complete_turn = None
         self.player2_mode = None
         self.status.value = "Pilih mode permainan"
         self.update_labels()
-        self.update_replay_button()
         self.board.redraw()
 
     def _show_mode_prompt(self):
@@ -449,6 +478,7 @@ class ChessScreen(BgScreen):
         self.new_game()
 
     def new_game(self):
+        # Kembalikan bidak, giliran, dan status ke kondisi awal.
         self.gen += 1
         self.eng.reset()
         self.sel = None
@@ -456,18 +486,23 @@ class ChessScreen(BgScreen):
         self.my_turn = True
         self.turn_state = self.PLAYER_TURN
         self.bot_thinking = False
-        self.is_replaying = False
         self.over = False
-        self.pending_turn = None
-        self.last_complete_turn = None
         self.status.value = "Giliranmu (putih)" if not self.player2_mode else "Giliran putih"
         self.update_labels()
-        self.update_replay_button()
         self.board.redraw()
+        self._update_ui()
 
     def reset_game(self, *_args):
         """Reset the board and invalidate any bot move already scheduled."""
         self.new_game()
+
+    def _update_ui(self):
+        try:
+            screen_page = self.page
+        except RuntimeError:
+            screen_page = None
+        if screen_page:
+            screen_page.update()
 
     def update_labels(self):
         white_count = sum(1 for row in self.eng.b for piece in row if piece and piece.isupper())
@@ -476,6 +511,7 @@ class ChessScreen(BgScreen):
         self.lbl_b.value = f"BOT {black_count}" if not self.player2_mode else f"P2 {black_count}"
 
     def tap(self, row, column):
+        # Pilih bidak atau jalankan langkah sah yang dipilih player.
         if (
             self.over
             or not self.my_turn
@@ -515,121 +551,19 @@ class ChessScreen(BgScreen):
         self.after_move(turn)
 
     def _apply_move(self, move):
-        before = self._snapshot()
         moved = self.eng.turn
         self.eng.make(move)
         self.eng.last = move
-        if moved == "w":
-            self.pending_turn = {"before": before, "player_move": move}
-            self.last_complete_turn = None
-        elif self.pending_turn is not None:
-            self.last_complete_turn = {
-                **self.pending_turn,
-                "bot_move": move,
-                "after": self._snapshot(),
-            }
-            self.pending_turn = None
-        self.update_replay_button()
         return moved
 
-    def _snapshot(self):
-        return ([row[:] for row in self.eng.b], self.eng.turn,
-                self.eng.ep, set(self.eng.rights), self.eng.last)
-
-    def _restore(self, snapshot):
-        board, turn, ep, rights, last = snapshot
-        self.eng.b = [row[:] for row in board]
-        self.eng.turn = turn
-        self.eng.ep = ep
-        self.eng.rights = set(rights)
-        self.eng.last = last
-
-    def _same_state(self, left, right):
-        return left[0] == right[0] and left[1:] == right[1:]
-
-    def update_replay_button(self):
-        self.replay_btn.disabled = (
-            self.over
-            or self.is_replaying
-            or self.bot_thinking
-            or self.pending_turn is not None
-            or self.last_complete_turn is None
-        )
-
-    async def replay_move(self):
-        record = self.last_complete_turn
-        if (
-            self.over
-            or self.is_replaying
-            or self.bot_thinking
-            or self.pending_turn is not None
-            or record is None
-        ):
-            self.update_replay_button()
-            return
-        current = self._snapshot()
-        if not self._same_state(current, record["after"]):
-            self.update_replay_button()
-            return
-
-        self.is_replaying = True
-        self.my_turn = False
-        self.status.value = "Mengulang giliran..."
-        self.update_replay_button()
-        try:
-            self._restore(record["before"])
-            self.sel = None
-            self.targets = []
-            self.update_labels()
-            self.board.redraw()
-            if self.app_page:
-                self.app_page.update()
-            await asyncio.sleep(0.18)
-
-            if record["player_move"] not in self.eng.legal("w"):
-                self._restore(current)
-                return
-            self.eng.make(record["player_move"])
-            self.eng.last = record["player_move"]
-            self.turn_state = self.BOT_TURN
-            self.update_labels()
-            self.board.redraw()
-            self.status.value = "Langkah player diputar ulang"
-            if self.app_page:
-                self.app_page.update()
-            await asyncio.sleep(0.18)
-
-            if record["bot_move"] not in self.eng.legal("b"):
-                self._restore(current)
-                return
-            self.eng.make(record["bot_move"])
-            self.eng.last = record["bot_move"]
-        finally:
-            self.is_replaying = False
-        self.pending_turn = None
-        self.my_turn = True
-        self.turn_state = self.PLAYER_TURN
-        self.bot_thinking = False
-        self.over = False
-        self.sel = None
-        self.targets = []
-        self.update_labels()
-        self.board.redraw()
-        self.status.value = "Gerakan player dan bot diputar ulang"
-        self.after_move("b")
-        if self.app_page:
-            self.app_page.update()
-
     def after_move(self, moved):
-        if self.is_replaying:
-            return
+        # Periksa hasil langkah dan tentukan giliran player berikutnya atau bot.
         next_turn = "b" if moved == "w" else "w"
         moves = self.eng.legal(next_turn)
         check = self.eng.in_check(next_turn)
         if not moves:
             self.over = True
             self.bot_thinking = False
-            self.update_replay_button()
             if check:
                 self.status.value = "Skakmat!"
                 message = "Skakmat! " + ("Kamu menang!" if moved == "w" else "Bot menang.")
@@ -651,7 +585,6 @@ class ChessScreen(BgScreen):
             if (
                 self.turn_state == self.BOT_TURN
                 or self.bot_thinking
-                or self.pending_turn is None
                 or self.eng.turn != "b"
             ):
                 return
@@ -666,9 +599,9 @@ class ChessScreen(BgScreen):
             self.bot_thinking = False
             self.my_turn = True
             self.status.value = ("SKAK! " if check else "") + "Giliranmu"
-            self.update_replay_button()
 
     async def _delayed_bot_move(self, generation):
+        # Beri jeda singkat, lalu jalankan bot hanya untuk sesi yang masih aktif.
         await asyncio.sleep(0.7)
         if (
             self.over
@@ -683,6 +616,7 @@ class ChessScreen(BgScreen):
             self.app_page.update()
 
     def bot_move(self, generation):
+        # Hitung dan terapkan langkah bot secara otomatis.
         if (
             self.over
             or generation != self.gen
@@ -702,4 +636,3 @@ class ChessScreen(BgScreen):
         self.update_labels()
         self.board.redraw()
         self.after_move("b")
-

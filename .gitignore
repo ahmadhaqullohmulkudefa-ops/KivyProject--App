@@ -1,3 +1,11 @@
 venv/
 __pycache__/
 *.db
+build/
+
+# Kivy Build & APK outputs
+build/
+bin/
+*.apk
+build/
+*.apk

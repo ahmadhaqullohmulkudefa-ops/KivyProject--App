@@ -1,3 +1,7 @@
+# ==================================================
+# IMPORT LIBRARY
+# Bagian ini memuat library untuk navigasi, file, dan audio.
+# ==================================================
 import asyncio
 import os
 from pathlib import Path
@@ -10,6 +14,10 @@ except ImportError:
 
 from common import CYAN, MUTED, TopBar
 
+# ==================================================
+# MEMUAT LAYAR GAME
+# Bagian ini menghubungkan setiap game dengan halaman utamanya.
+# ==================================================
 chess_import_error = None
 try:
     from chessgame import ChessScreen
@@ -46,6 +54,10 @@ except ImportError as error:
     tictactoe_import_error = error
 
 
+# ==================================================
+# DAFTAR GAME
+# Data ini dipakai untuk menampilkan dan membuka game dari menu.
+# ==================================================
 GAMES = (
     {
         "key": "chess",
@@ -90,6 +102,10 @@ GAMES = (
 )
 
 
+# ==================================================
+# NAVIGASI APLIKASI
+# Class ini mengatur perpindahan halaman dan menyimpan layar game.
+# ==================================================
 class FiveGamesRouter:
     def __init__(self, page):
         self.page = page
@@ -115,6 +131,7 @@ class FiveGamesRouter:
         self.audio = None
 
     def start(self):
+        # Atur tampilan awal aplikasi dan siapkan layanan musik.
         self.page.title = "Five Games"
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.bgcolor = "#090D17"
@@ -147,12 +164,13 @@ class FiveGamesRouter:
         self.active_screen = None
 
     def _show_route(self, route):
+        # Tampilkan menu atau game sesuai alamat halaman yang dipilih.
         key = route.strip("/")
         if not key:
             self._leave_active_screen()
             self.active_key = None
             self.page.clean()
-            self.page.add(self._build_menu())
+            self.page.add(ft.SafeArea(content=self._build_menu(), expand=True))
             return
 
         game = self.games_by_key.get(key)
@@ -169,7 +187,9 @@ class FiveGamesRouter:
         screen = self.screens.get(key)
         if screen is None:
             if game["screen"] is None:
-                self.page.add(self._build_import_error(game))
+                self.page.add(
+                    ft.SafeArea(content=self._build_import_error(game), expand=True)
+                )
                 return
             screen = game["screen"](self.page)
             self.screens[key] = screen
@@ -183,9 +203,10 @@ class FiveGamesRouter:
                 self.page.on_keyboard_event = screen._key
 
         self.active_screen = screen
-        self.page.add(screen)
+        self.page.add(ft.SafeArea(content=screen, expand=True))
 
     def _build_menu(self):
+        # Susun tombol game dan komponen utama pada halaman menu.
         icon_by_key = {
             "tictactoe": ft.Icons.GRID_3X3,
             "chess": None,
@@ -240,6 +261,8 @@ class FiveGamesRouter:
             icon_color="#EAF5FF",
             bgcolor="#1A263A",
             icon_size=21,
+            width=48,
+            height=48,
             tooltip="Music",
             style=ft.ButtonStyle(shape=ft.CircleBorder()),
             on_click=self._show_music_menu,
@@ -252,7 +275,7 @@ class FiveGamesRouter:
                         self.music_button,
                     ],
                     alignment=ft.MainAxisAlignment.END,
-                    height=42,
+                    height=52,
                 ),
                 ft.Column(
                     controls=[
@@ -316,11 +339,12 @@ class FiveGamesRouter:
                 expand=True,
             ),
             bgcolor="#090D17",
-            padding=ft.Padding(20, 12, 20, 12),
+            padding=ft.Padding(20, 8, 20, 12),
             expand=True,
         )
 
     def _show_music_menu(self, _event=None):
+        # Tampilkan pilihan lagu dan status audio dalam dialog.
         playlist = []
         for path in self.music_paths:
             number = int(path.stem[4:])
@@ -399,12 +423,14 @@ class FiveGamesRouter:
             self.music_error = None
 
     def _music_option_handler(self, path):
+        # Buat handler async agar pemilihan lagu menunggu proses audio.
         async def select(_event):
             await self._select_music(path)
 
         return select
 
     async def _select_music(self, path):
+        # Muat lagu pilihan, lalu mulai pemutaran dengan penanganan error.
         self.current_music = path
         self.music_muted = False
         self.music_error = None
@@ -438,6 +464,7 @@ class FiveGamesRouter:
                 self.page.update()
 
     async def _toggle_music_mute(self, _event=None):
+        # Ubah status mute dan jalankan perintah audio yang sesuai.
         self.music_muted = not self.music_muted
         self._update_music_button()
         self._close_music_menu()
@@ -463,6 +490,7 @@ class FiveGamesRouter:
             )
 
     def _build_import_error(self, game):
+        # Beri pesan jika suatu layar game gagal dimuat.
         return ft.Container(
             content=ft.Column(
                 controls=[
@@ -484,6 +512,10 @@ class FiveGamesRouter:
         )
 
 
+# ==================================================
+# TITIK MASUK APLIKASI
+# Fungsi ini mengatur ukuran jendela desktop dan memulai router.
+# ==================================================
 def main(page: ft.Page):
     if page.platform in (ft.PagePlatform.WINDOWS, ft.PagePlatform.LINUX, ft.PagePlatform.MACOS):
         page.window.width = 414

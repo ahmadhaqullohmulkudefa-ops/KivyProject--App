@@ -1,3 +1,7 @@
+# ==================================================
+# IMPORT LIBRARY DAN ATURAN PERMAINAN
+# Bagian ini menyiapkan pilihan acak, jeda animasi, dan aturan papan.
+# ==================================================
 import random
 
 import asyncio
@@ -8,6 +12,10 @@ from common import BgScreen, TopBar, ModernButton, info_popup, DARKBTN, SURFACE,
 LINES = [(0, 1, 2), (3, 4, 5), (6, 7, 8), (0, 3, 6), (1, 4, 7), (2, 5, 8), (0, 4, 8), (2, 4, 6)]
 
 
+# ==================================================
+# PEMERIKSA HASIL DAN STRATEGI BOT
+# Fungsi ini memeriksa pemenang dan mencari langkah terbaik bot.
+# ==================================================
 def winner(b):
     for x, y, z in LINES:
         if b[x] and b[x] == b[y] == b[z]:
@@ -38,6 +46,7 @@ def minimax(b, ai):
 
 
 class TTTBoard(ft.GridView):
+    # Papan ini menggambar sembilan kotak dan meneruskan aksi sentuh.
     def __init__(self, game):
         self.game = game
         self.selected = -1
@@ -62,7 +71,7 @@ class TTTBoard(ft.GridView):
                 ft.Container(
                     content=ft.Text(
                         mark or "",
-                        size=58,
+                        size=self.game.cell_font_size,
                         weight=ft.FontWeight.BOLD,
                         color=mark_color,
                         text_align=ft.TextAlign.CENTER,
@@ -103,6 +112,7 @@ class TTTBoard(ft.GridView):
             self.redraw()
 
     async def _restore_scale(self, index):
+        # Kembalikan ukuran kotak setelah animasi langkah selesai.
         await asyncio.sleep(0.03)
         self.scales[index] = 1
         self.redraw()
@@ -115,6 +125,7 @@ class TTTBoard(ft.GridView):
             self.game.app_page.run_task(self._pulse_winner, list(cells))
 
     async def _pulse_winner(self, cells):
+        # Sorot kotak pemenang satu per satu dengan animasi singkat.
         for index in cells:
             self.selected = index
             self.pulse = 1
@@ -131,6 +142,7 @@ class TTTBoard(ft.GridView):
 
 
 class TicScreen(BgScreen):
+    # Layar ini mengatur langkah player, giliran bot, dan skor permainan.
     def __init__(self, page, **kwargs):
         self.app_page = page
         self.b = [None] * 9
@@ -142,6 +154,7 @@ class TicScreen(BgScreen):
         self.lbl_k = ft.Text("KAMU 0", weight=ft.FontWeight.BOLD, color=CYAN, size=16)
         self.lbl_v = ft.Text("VS", weight=ft.FontWeight.BOLD, color=MUTED)
         self.lbl_b = ft.Text("BOT 0", weight=ft.FontWeight.BOLD, color="#FF7168", size=16)
+        self.cell_font_size = 58
         self.board = TTTBoard(self)
         self.status = ft.Text(
             "Giliranmu (X)",
@@ -149,7 +162,23 @@ class TicScreen(BgScreen):
             size=16,
             weight=ft.FontWeight.BOLD,
         )
-        board_size = min(max((getattr(page, "width", None) or 430) - 32, 280), 480)
+        viewport_width = getattr(page, "width", None) or 430
+        viewport_height = getattr(page, "height", None) or 768
+        board_size = min(480, max(0, viewport_width - 40), max(0, viewport_height - 260))
+        self.board_frame = ft.Container(
+            content=self.board,
+            width=board_size,
+            height=board_size,
+            padding=8,
+            bgcolor="#0B111C",
+            border_radius=18,
+        )
+        self.board_slot = ft.Container(
+            content=self.board_frame,
+            expand=True,
+            alignment=ft.Alignment(0, 0),
+            on_size_change=self._fit_board,
+        )
         content = ft.Column(
             controls=[
                 TopBar(page, "TIC TAC TOE", on_refresh=lambda _event: self.new_game()),
@@ -158,27 +187,36 @@ class TicScreen(BgScreen):
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     height=48,
                 ),
-                ft.Container(
-                    content=self.board,
-                    width=board_size,
-                    height=board_size,
-                    padding=8,
-                    bgcolor="#0B111C",
-                    border_radius=18,
-                ),
+                self.board_slot,
                 self.status,
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=8,
-            scroll=ft.ScrollMode.AUTO,
+            spacing=6,
             expand=True,
         )
         super().__init__(bg="#090D17", content=content, padding=12, **kwargs)
+
+    def _fit_board(self, event):
+        board_size = min(event.width, event.height, 480)
+        if board_size <= 0:
+            return
+        if self.board_frame.width != board_size or self.board_frame.height != board_size:
+            self.board_frame.width = board_size
+            self.board_frame.height = board_size
+            self.cell_font_size = max(36, min(58, (board_size - 16) * 0.16))
+            self.board.redraw()
+            try:
+                board_page = self.board_frame.page
+            except RuntimeError:
+                board_page = None
+            if board_page:
+                self.board_frame.update()
 
     def on_enter(self):
         self.new_game()
 
     def new_game(self):
+        # Bersihkan papan dan batalkan hasil dari giliran sebelumnya.
         self.gen += 1
         self.b = [None] * 9
         self.locked = False
@@ -191,6 +229,7 @@ class TicScreen(BgScreen):
             self.app_page.update()
 
     def player_move(self, i):
+        # Catat pilihan player, periksa hasil, lalu jadwalkan giliran bot.
         if self.locked or self.b[i] is not None:
             return
         self.b[i] = 'X'
@@ -207,10 +246,12 @@ class TicScreen(BgScreen):
             self.app_page.run_task(self._delayed_bot_move, self.gen)
 
     async def _delayed_bot_move(self, generation):
+        # Beri jeda animasi sebelum bot memilih langkahnya.
         await asyncio.sleep(0.55)
         self.bot_move(generation)
 
     def bot_move(self, g):
+        # Pilih langkah kosong dengan minimax dan perbarui papan permainan.
         if g != self.gen:
             return
         empty = [i for i in range(9) if self.b[i] is None]
@@ -232,6 +273,7 @@ class TicScreen(BgScreen):
             self.app_page.update()
 
     def _end(self, w):
+        # Kunci papan, perbarui skor, dan jadwalkan dialog hasil.
         self.locked = True
         if w == 'X':
             self.sk += 1; title, message, button, status = 'MENANG!', 'Selamat, kamu menang!', 'Main lagi', 'Kamu menang!'
@@ -250,6 +292,7 @@ class TicScreen(BgScreen):
             self.app_page.run_task(self._delayed_result_dialog, title, message, button)
 
     async def _delayed_result_dialog(self, title, message, button):
+        # Tampilkan dialog setelah animasi hasil selesai.
         await asyncio.sleep(0.62)
         info_popup(
             self.app_page,
